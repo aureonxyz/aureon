@@ -35,7 +35,6 @@ const getWebsocketProvider = (): WebSocketProvider | null => {
     console.error('Quiknode API key is required.');
     return null;
   }
-  console.log('Creating WebSocketProvider with URL:', quikUrl);
   return new WebSocketProvider(quikUrl);
 }
 

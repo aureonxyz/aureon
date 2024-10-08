@@ -25,9 +25,7 @@ function createBlockchainStore() {
   const { subscribe, set, update } = writable<BlockchainState>(initialState);
 
   function setupEventListeners(wssContract: Contract, jsonContract: Contract, index: number) {
-    console.log(`Setting up event listeners for contract ${index}`);
     wssContract.on('LayerPurchased', async (buyer: string, x: number, y: number, numLayers: number, color: string) => {
-      console.log(`LayerPurchased event received for contract ${index}:`, { buyer, x, y, numLayers, color });
       const updatedTotalValue = new BigNumber(await jsonContract.calculateTotalValue());
       update(state => {
         const newTotalValues = [...state.totalValues];
@@ -43,7 +41,6 @@ function createBlockchainStore() {
     if (index !== 0) {
       try {
         wssContract.on('ContractEnabled', async () => {
-          console.log(`ContractEnabled event received for contract ${index}`);
           await fetchStages();
         });
       } catch (error) {
@@ -53,7 +50,6 @@ function createBlockchainStore() {
   }
 
   function updateCanvasCell(buyer: string, x: number, y: number, numLayers: number, color: string, stageIndex: number, updatedTotalValues: BigNumber[]) {
-    console.log(`Updating canvas cell:`, { buyer, x, y, numLayers, color, stageIndex });
     canvasStore.update(state => {
       const canvas = state.canvas;
       if (!canvas) {
@@ -66,7 +62,6 @@ function createBlockchainStore() {
       ) as fabric.Rect & CustomRectOptions;
 
       if (square) {
-        console.log(`Updating square:`, { x, y, stageIndex, color });
         square.set('fill', color);
         square.originalFill = color;
         const updatedLayers: Layer[] = [...(square.squareLayers || [])];
@@ -93,11 +88,9 @@ function createBlockchainStore() {
   }
 
   async function getConnectedPolygonAccounts(): Promise<string[]> {
-    console.log('Getting connected Polygon accounts');
     if (typeof window.ethereum !== 'undefined' && window.ethereum.isConnected()) {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        console.log('Connected accounts:', accounts);
         return accounts;
       } catch (error) {
         console.error('Error getting connected accounts:', error);
@@ -105,29 +98,23 @@ function createBlockchainStore() {
         return [];
       }
     }
-    console.log('No Ethereum provider found');
     return [];
   }
 
   async function fetchStages() {
-    console.log('Fetching stages');
     try {
       const provider = await getProvider();
       if (!provider) {
         throw new Error('Failed to get a provider.');
       }
-      console.log('Provider obtained');
       const wssProvider = getWebsocketProvider();
-      console.log('WebSocket provider obtained');
       const stages: Stage[] = [];
       const totalValues: BigNumber[] = [];
       const contracts: Contract[] = [];
       const websocketContracts: Contract[] = [];
 
       const contractAddresses = contractConfig.polygon.Pixelflux;
-      console.log(`Fetching data for ${contractAddresses.length} contracts`);
       for (const [index, address] of contractAddresses.entries()) {
-        console.log(`Processing contract ${index} at address ${address}`);
         const jsonContract = new Contract(address, contractABIs[index], provider);
         const wssContract = new Contract(address, contractABIs[index], wssProvider);
 
@@ -137,15 +124,12 @@ function createBlockchainStore() {
         setupEventListeners(wssContract, jsonContract, index);
 
         const isEnabled = await jsonContract.isContractEnabled();
-        console.log(`Contract ${index} enabled:`, isEnabled);
         const cells: Cell[][] = isEnabled ? await jsonContract.getAllCellStates() : [];
-        console.log(`Contract ${index} cells:`, cells.length > 0 ? `${cells.length}x${cells[0].length}` : 'None');
         const stageData: Stage = {
           isEnabled,
           cells
         };
         const totalValue = new BigNumber(await jsonContract.calculateTotalValue());
-        console.log(`Contract ${index} total value:`, totalValue.toString());
         totalValues.push(totalValue);
 
         const progressPercentage = ((index + 1) / contractAddresses.length) * 100;
@@ -157,10 +141,6 @@ function createBlockchainStore() {
 
         stages.push(stageData);
       }
-
-      console.log('All stages fetched', stages);
-      console.log('Total values:', totalValues.map(v => v.toString()));
-
       set({
         stages,
         totalValues,
@@ -180,11 +160,9 @@ function createBlockchainStore() {
   }
 
   async function buyLayer(x: number, y: number, stage: number, color: string) {
-    console.log(`Attempting to buy layer:`, { x, y, stage, color });
     try {
       const accounts = await getConnectedPolygonAccounts();
       if (accounts.length === 0) {
-        console.log('No connected accounts, showing wallet modal');
         showWalletModal('Please connect your wallet to continue.');
         return;
       }
@@ -202,11 +180,8 @@ function createBlockchainStore() {
 
       const state = get({ subscribe });
       const contract = state.contracts[stage];
-      console.log(`Calling buyLayer on contract for stage ${stage}`);
       const tx = await contract.buyLayer(x, y, color);
-      console.log('Transaction sent:', tx.hash);
       await tx.wait();
-      console.log('Transaction confirmed');
 
       showNotification('Layer purchased successfully!');
     } catch (error) {

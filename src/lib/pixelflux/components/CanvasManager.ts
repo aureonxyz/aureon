@@ -12,38 +12,27 @@ export class CanvasManager {
   canvasContainer: HTMLDivElement;
 
   constructor(canvasContainer: HTMLDivElement) {
-    console.log('CanvasManager: Initializing');
     this.canvasContainer = canvasContainer;
     this.canvas = this.createCanvas();
   }
 
   createCanvas(): fabric.Canvas {
-    console.log('CanvasManager: Creating canvas');
     const canvas = new fabric.Canvas('pixelflux-canvas');
-    console.log('CanvasManager: Canvas created:', canvas);
     canvas.backgroundColor = CANVAS_CONFIG.BACKGROUND_COLOR;
     canvas.renderAll();
     return canvas;
   }
 
   updateCanvas(stages: Stage[], totalValues: any[]): void {
-    console.log('CanvasManager: Updating canvas');
-    console.log('CanvasManager: Stages:', stages);
-    console.log('CanvasManager: Total Values:', totalValues);
-
     this.canvas.clear();
     this.setCanvasDimensions(stages);
 
     let yOffset = 0;
     for (const [index, stage] of stages.entries()) {
-      console.log(`CanvasManager: Setting up stage ${index}`);
-      console.log(`CanvasManager: Stage ${index} enabled:`, stage.isEnabled);
       if (stage.isEnabled) {
-        console.log(`CanvasManager: Setting up content for stage ${index}`);
         this.setupCanvasContent(stage.cells, yOffset, index);
         yOffset += stage.cells.length;
       } else {
-        console.log(`CanvasManager: Setting up disabled content for stage ${index}`);
         this.setupDisabledStageContent(index, yOffset, totalValues);
         break;
       }
@@ -56,17 +45,11 @@ export class CanvasManager {
     const totalHeight = this.getTotalHeight(stages);
     this.canvas.setWidth(gridWidth * CANVAS_CONFIG.CELL_SIZE);
     this.canvas.setHeight(totalHeight * CANVAS_CONFIG.CELL_SIZE);
-    console.log(`CanvasManager: Canvas dimensions set to ${this.canvas.width}x${this.canvas.height}`);
   }
 
   setupCanvasContent(allCells: Cell[][], yOffset: number, stage: number): void {
-    console.log(`CanvasManager: Setting up canvas content for stage ${stage}`);
-    console.log(`CanvasManager: Number of cells:`, allCells.length);
     const gridHeight = allCells.length;
     const gridWidth = allCells[0].length;
-
-    console.log(`CanvasManager: Grid dimensions: ${gridWidth}x${gridHeight}`);
-
     const gridImageUrl = this.generateGridImage(gridWidth, gridHeight);
     this.canvas.setBackgroundColor(gridImageUrl, () => this.canvas.renderAll());
     this.canvas.backgroundColor = "#000";
@@ -104,21 +87,22 @@ export class CanvasManager {
         squares.push(square);
       }
     }
-    console.log(`CanvasManager: Adding ${squares.length} squares to canvas`);
     this.canvas.add(...squares);
     this.canvas.renderAll();
-    console.log('CanvasManager: Canvas objects after adding squares:', this.canvas.getObjects().length);
   }
 
   setupDisabledStageContent(stageIndex: number, yOffset: number, totalValues: any[]): void {
-    console.log(`CanvasManager: Setting up disabled content for stage ${stageIndex}`);
     const imageUrl = stageIndex === 1 ? stage2LockedImage : stage3LockedImage;
     const gridWidth = this.getGridWidth(get(canvasStore).stages);
-
-    fabric.Image.fromURL(imageUrl, img => {
-      console.log(`CanvasManager: Loaded image for disabled stage ${stageIndex}`);
+  
+    fabric.Image.fromURL(imageUrl, (img) => {
+      if (!img) {
+        console.error(`Failed to load image for stage ${stageIndex + 1}`);
+        return;
+      }
+  
       const scaleFactor = (STAGE_DISABLED_HEIGHT * CANVAS_CONFIG.CELL_SIZE) / (img.height || 1);
-
+  
       img.set({
         left: 0,
         top: yOffset * CANVAS_CONFIG.CELL_SIZE,
@@ -126,18 +110,18 @@ export class CanvasManager {
         scaleX: scaleFactor,
         scaleY: scaleFactor
       });
-
+  
       const overlayRect = new fabric.Rect({
         left: -1,
         top: img.top ?? 0,
-        width: ((img.width ?? 100) * scaleFactor),
+        width: ((img.width ?? 100) * scaleFactor) + 2,
         height: ((img.height ?? 100) * scaleFactor),
         fill: 'rgba(0, 0, 0, 0.5)',
         selectable: false
       });
-
+  
       this.canvas.add(img, overlayRect);
-
+  
       const middleY = (img.top ?? 0) + ((img.height ?? 100) * scaleFactor) / 2;
       const labelLeftPosition = gridWidth * CANVAS_CONFIG.CELL_SIZE * 0.5;
       
@@ -147,14 +131,14 @@ export class CanvasManager {
         fontSize: 60,
         fill: 'white'
       }, 'stageLabel');
-
+  
       const notEnabledLabel = this.createTextLabel('Locked', {
         left: labelLeftPosition,
         top: middleY + 60,
         fontSize: 60,
         fill: 'red'
       }, 'lockedLabel');
-
+  
       const stage1Value = Number(fromGweiToMatic(totalValues[0]));
       const stage2Value = Number(fromGweiToMatic(totalValues[1]));
       const requiredTotalValueText = this.getRequiredTotalValueText(stageIndex, stage1Value, stage2Value);
@@ -162,48 +146,57 @@ export class CanvasManager {
         notEnabledLabel.text = 'Waiting for owner unlock';
         notEnabledLabel.fill = 'green';
       }
-
+  
       const requiredValueLabel = this.createTextLabel(requiredTotalValueText, {
         left: labelLeftPosition,
         top: middleY - 50,
         fontSize: 30,
         fill: 'yellow'
       }, 'requiredLabel');
-
+  
       this.canvas.add(stageLabel, notEnabledLabel, requiredValueLabel);
       this.canvas.renderAll();
-      console.log('CanvasManager: Disabled stage content added to canvas');
+  
+      console.log(`Disabled stage ${stageIndex + 1} content added to canvas`);
     });
   }
-
   resizeCanvas = (): void => {
-    console.log('CanvasManager: Resizing canvas');
     if (this.canvasContainer && this.canvas) {
-      const { clientWidth: width, clientHeight: height } = this.canvasContainer;
-      console.log(`CanvasManager: Container size: ${width}x${height}`);
+      const { clientWidth: containerWidth, clientHeight: containerHeight } = this.canvasContainer;
+      const sidebarWidth = 260; // Width of the sidebar
       
       const gridWidth = this.getGridWidth(get(canvasStore).stages);
       const gridHeight = this.getTotalHeight(get(canvasStore).stages);
       
-      const scaleX = width / (gridWidth * CANVAS_CONFIG.CELL_SIZE);
-      const scaleY = height / (gridHeight * CANVAS_CONFIG.CELL_SIZE);
-      const scale = Math.min(scaleX, scaleY);
+      // Calculate available width for canvas
+      const availableWidth = containerWidth - sidebarWidth;
       
+      // Calculate scale based on available width
+      const scale = availableWidth / (gridWidth * CANVAS_CONFIG.CELL_SIZE);
+      
+      // Set canvas dimensions
+      const canvasWidth = availableWidth;
+      const canvasHeight = Math.min(containerHeight, gridHeight * CANVAS_CONFIG.CELL_SIZE * scale);
+      
+      this.canvas.setWidth(canvasWidth);
+      this.canvas.setHeight(canvasHeight);
       this.canvas.setZoom(scale);
-      this.canvas.setWidth(width);
-      this.canvas.setHeight(height);
+      
+      // Align top-left
+      const vpt = this.canvas.viewportTransform;
+      if (vpt) {
+        vpt[4] = 0; // Left align
+        vpt[5] = 0; // Top align
+      }
       
       this.canvas.renderAll();
       
-      console.log(`CanvasManager: Canvas resized to ${this.canvas.width}x${this.canvas.height} with zoom ${scale}`);
+      console.log(`Canvas resized to ${canvasWidth}x${canvasHeight} with zoom ${scale}`);
     }
   }
-
   handleSquareClick = (e: fabric.IEvent): void => {
-    console.log('CanvasManager: Square clicked');
     if (!e.target) return;
     const clickedSquare = e.target as fabric.Rect & CustomRectOptions;
-    console.log('CanvasManager: Clicked square:', clickedSquare);
 
     const currentState = get(canvasStore);
     if (currentState.selectedSquare && currentState.selectedSquare !== clickedSquare) {
@@ -216,7 +209,6 @@ export class CanvasManager {
 
   getGridWidth(stages: Stage[]): number {
     const width = stages[0]?.cells[0]?.length || 0;
-    console.log(`CanvasManager: Grid width: ${width}`);
     return width;
   }
 
@@ -224,12 +216,10 @@ export class CanvasManager {
     const contentHeight = stages.reduce((acc, stage) => acc + stage.cells.length, 0);
     const hasDisabledStage = stages.some(stage => !stage.isEnabled);
     const totalHeight = contentHeight + (hasDisabledStage ? STAGE_DISABLED_HEIGHT : 0);
-    console.log(`CanvasManager: Total height: ${totalHeight}`);
     return totalHeight;
   }
 
   generateGridImage(gridWidth: number, gridHeight: number): string {
-    console.log(`CanvasManager: Generating grid image: ${gridWidth}x${gridHeight}`);
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = gridWidth * CANVAS_CONFIG.CELL_SIZE;
     tempCanvas.height = gridHeight * CANVAS_CONFIG.CELL_SIZE;
@@ -281,7 +271,6 @@ export class CanvasManager {
   }
 
   createTextLabel(text: string, options: fabric.ITextOptions, id?: string): fabric.Text {
-    console.log(`CanvasManager: Creating text label: ${text}`);
     const defaultOptions = {
       fontFamily: 'kirbyss',
       originX: 'center',
@@ -297,7 +286,6 @@ export class CanvasManager {
 
   getTextLabelById(id: string): TextLabelWithId | undefined {
     const label = this.canvas.getObjects().find((obj: any) => obj.type === 'text' && obj.id === id) as TextLabelWithId;
-    console.log(`CanvasManager: Getting text label by id: ${id}`, label);
     return label;
   }
 
