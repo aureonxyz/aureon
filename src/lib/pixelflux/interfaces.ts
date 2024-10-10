@@ -47,7 +47,8 @@ export interface CanvasState {
 
 
 export interface CanvasStore extends Writable<CanvasState> {
-  setSvg: (svg: SVGSVGElement) => void;
+  updateCellColor(x: number, y: number, stage: number, selectedColor: string): unknown;
+  setSvg: (svg: SVGSVGElement | null) => void;
   setSelectedSquare: (square: SVGRectElement | null) => void;
   updateCell: (buyer: string, x: number, y: number, numLayers: number, color: string, stageIndex: number) => void;
   updateTotalValues: (newTotalValues: BigNumber[]) => void;

@@ -2,39 +2,35 @@
   import { onMount, onDestroy } from 'svelte';
   import { canvasStore } from '../stores/canvasStore';
   import { blockchainStore } from '../stores/blockchainStore';
-  import { sidebarStore } from '../stores/sidebarStore'; 
+  import { sidebarStore } from '../stores/sidebarStore';
   import { CanvasManager } from './CanvasManager';
-  
+
   let canvasContainer: HTMLDivElement;
   let canvasManager: CanvasManager;
-  
-  $: stages = $canvasStore.stages;
-  $: totalValues = $canvasStore.totalValues;
-  $: if (canvasManager && stages && totalValues) {
-    canvasManager.updateCanvas(stages, totalValues);
+
+  $: if (canvasManager && $canvasStore.stages && $canvasStore.totalValues) {
+    canvasManager.updateCanvas();
   }
 
   function handleResize() {
-  if (canvasManager) {
-    const sidebarWidth = $sidebarStore.isOpen ? $sidebarStore.width : 0;
-    canvasManager.resizeCanvas(sidebarWidth);
+    if (canvasManager) {
+      const sidebarWidth = $sidebarStore.isOpen ? $sidebarStore.width : 0;
+      canvasManager.resizeCanvas(sidebarWidth);
+    }
   }
-}
 
   onMount(() => {
     canvasManager = new CanvasManager(canvasContainer);
-    canvasStore.setSvg(canvasManager.svg);
     window.addEventListener('resize', handleResize);
     blockchainStore.fetchStages();
     handleResize(); // Initial resize
   });
 
-  
   onDestroy(() => {
     window.removeEventListener('resize', handleResize);
     canvasManager.dispose();
   });
-  </script>
+</script>
   
   <div id="canvas-container" bind:this={canvasContainer}>
     <!-- SVG will be inserted here by CanvasManager -->

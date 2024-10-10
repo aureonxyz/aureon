@@ -1,5 +1,6 @@
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
+  import { colorStore } from '../stores/colorStore';
   import { blockchainStore } from '../stores/blockchainStore';
   import { fromGweiToMatic } from '../utils';
   import BigNumber from 'bignumber.js';
@@ -8,6 +9,7 @@
   let squareLayers: Layer[] = [];
   
   $: selectedSquare = $canvasStore.selectedSquare;
+  $: selectedColor = $colorStore;
   $: squareValue = new BigNumber(0);
   $: currentLayerNumber = 0;
   $: currentValue = '0';
@@ -16,8 +18,6 @@
   $: currentFill = '#000';
 
   $: {
-    console.log('PixelCard: Reactive block triggered');
-    console.log('PixelCard: selectedSquare', selectedSquare);
 
     if (selectedSquare) {
       const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
@@ -34,17 +34,9 @@
 
       coordinates = `x: ${x}, y: ${y}`;
       originalFill = selectedSquare.getAttribute('data-originalFill') || '#000';
-      currentFill = selectedSquare.getAttribute('fill') || '#000';
+      currentFill = selectedColor;  // Use the selected color from the store
 
-      console.log('PixelCard updated:', { 
-        squareValue: squareValue.toString(), 
-        currentLayerNumber, 
-        valueInMatic: valueInMatic.toString(), 
-        currentValue, 
-        coordinates 
-      });
     } else {
-      console.log('PixelCard: No square selected');
       squareLayers = [];
       currentValue = '0';
       coordinates = 'No pixel selected';
@@ -52,7 +44,6 @@
       currentFill = '#000';
     }
   }
-
   function handleHover(element: 'current' | 'preview', isHovered: boolean): void {
     const selector = element === 'current' ? '.pixel-current' : '.pixel-preview';
     const pixelElement = document.querySelector(selector) as HTMLElement | null;
@@ -61,7 +52,6 @@
     }
   }
 </script>
-
 
 <div class="pixel-card">
   <h3>Selected Pixel</h3>

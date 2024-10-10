@@ -1,19 +1,29 @@
+// CanvasManager.ts
+import { get } from 'svelte/store';
+import { canvasStore } from '../stores/canvasStore';
 import { CANVAS_CONFIG, STAGE_DISABLED_HEIGHT, STAGE_THRESHOLDS } from '../canvasConfig';
-import type { Stage, Cell } from '../interfaces';
 import { fromGweiToMatic } from '../utils';
 import stage2LockedImage from '../assets/stage2_locked.jpg';
 import stage3LockedImage from '../assets/stage3_locked.jpg';
-import { canvasStore } from '../stores/canvasStore';
-import { get } from 'svelte/store';
+import type { Cell, Stage } from '$pixelflux/interfaces';
+import { colorStore } from '$pixelflux/stores/colorStore';
 
 export class CanvasManager {
   svg: SVGSVGElement;
   canvasContainer: HTMLDivElement;
+  private unsubscribeColorStore: () => void;
+
 
   constructor(canvasContainer: HTMLDivElement) {
     this.canvasContainer = canvasContainer;
     this.svg = this.createSVG();
     this.canvasContainer.appendChild(this.svg);
+    canvasStore.setSvg(this.svg);
+
+    // Subscribe to colorStore changes
+    this.unsubscribeColorStore = colorStore.subscribe(() => {
+      this.updateSelectedSquareColor();
+    });
   }
 
   createSVG(): SVGSVGElement {
@@ -23,7 +33,8 @@ export class CanvasManager {
     return svg;
   }
 
-  updateCanvas(stages: Stage[], totalValues: any[]): void {
+  updateCanvas(): void {
+    const { stages, totalValues } = get(canvasStore);
     this.svg.innerHTML = '';  // Clear the SVG
     this.setCanvasDimensions(stages);
 
@@ -45,16 +56,15 @@ export class CanvasManager {
     this.svg.setAttribute("width", `${gridWidth * CANVAS_CONFIG.CELL_SIZE}`);
     this.svg.setAttribute("height", `${totalHeight * CANVAS_CONFIG.CELL_SIZE}`);
   }
-
   setupCanvasContent(allCells: Cell[][], yOffset: number, stage: number): void {
     const gridHeight = allCells.length;
     const gridWidth = allCells[0].length;
-
+  
     for (let y = 0; y < gridHeight; y++) {
       for (let x = 0; x < gridWidth; x++) {
         let cell = allCells[y][x];
         let fillColor = cell.layers.length > 0 ? cell.layers[cell.layers.length - 1].color : "#000";
-
+  
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         rect.setAttribute("x", `${x * CANVAS_CONFIG.CELL_SIZE}`);
         rect.setAttribute("y", `${(y + yOffset) * CANVAS_CONFIG.CELL_SIZE}`);
@@ -67,9 +77,16 @@ export class CanvasManager {
         rect.setAttribute("data-stage", stage.toString());
         rect.setAttribute("data-yOffset", yOffset.toString());
         rect.setAttribute("data-originalFill", fillColor);
-        rect.setAttribute("data-squareValue", cell.baseValue.toString());
+        
+        // Check if baseValue exists before setting it as an attribute
+        if (cell.baseValue !== undefined) {
+          rect.setAttribute("data-squareValue", cell.baseValue.toString());
+        } else {
+          rect.setAttribute("data-squareValue", "0");
+        }
+        
         rect.setAttribute("data-squareLayers", JSON.stringify(cell.layers));
-
+  
         rect.addEventListener('mousedown', (e) => this.handleSquareClick(e));
         rect.addEventListener('mouseover', () => this.handleSquareHover(rect));
         rect.addEventListener('mouseout', () => this.handleSquareHoverOut(rect));
@@ -77,7 +94,6 @@ export class CanvasManager {
       }
     }
   }
-
   setupDisabledStageContent(stageIndex: number, yOffset: number, totalValues: any[]): void {
     const imageUrl = stageIndex === 1 ? stage2LockedImage : stage3LockedImage;
     const gridWidth = this.getGridWidth(get(canvasStore).stages);
@@ -164,19 +180,10 @@ export class CanvasManager {
   }
 
 
+
   handleSquareClick = (e: MouseEvent): void => {
     const clickedSquare = e.target as SVGRectElement;
     if (!clickedSquare) return;
-  
-    const gridX = clickedSquare.getAttribute('data-gridX');
-    const gridY = clickedSquare.getAttribute('data-gridY');
-    const stage = clickedSquare.getAttribute('data-stage');
-    const squareValue = clickedSquare.getAttribute('data-squareValue');
-    const originalFill = clickedSquare.getAttribute('data-originalFill');
-    const fill = clickedSquare.getAttribute('fill');
-  
-    console.log('Square clicked:', { gridX, gridY, stage, squareValue, originalFill, fill });
-  
     canvasStore.setSelectedSquare(clickedSquare);
   }
 
@@ -191,7 +198,26 @@ export class CanvasManager {
       square.setAttribute("stroke", CANVAS_CONFIG.GRID_COLOR);
     }
   }
-
+  updateSelectedSquareColor = (): void => {
+    const selectedSquare = get(canvasStore).selectedSquare;
+    const selectedColor = get(colorStore);
+    if (selectedSquare) {
+      const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+      const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+      const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+      
+      try {
+        // Update the canvasStore with the new color
+        canvasStore.updateCellColor(x, y, stage, selectedColor);
+        
+        // After updating the store, redraw the entire canvas
+        this.updateCanvas();
+      } catch (error) {
+        console.error('Error updating cell color:', error);
+      }
+    }
+  }
+  
   getGridWidth(stages: Stage[]): number {
     return stages[0]?.cells[0]?.length || 0;
   }
@@ -252,9 +278,14 @@ export class CanvasManager {
   }
 
   dispose(): void {
-    console.log('CanvasManager: Disposing SVG');
     if (this.svg && this.svg.parentNode) {
       this.svg.parentNode.removeChild(this.svg);
+    }
+    canvasStore.setSvg(null);
+    
+    // Unsubscribe from colorStore
+    if (this.unsubscribeColorStore) {
+      this.unsubscribeColorStore();
     }
   }
 }

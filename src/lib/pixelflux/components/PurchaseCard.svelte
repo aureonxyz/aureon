@@ -1,31 +1,26 @@
-
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
   import { blockchainStore } from '../stores/blockchainStore';
-  import { fromWeiToMatic } from '../utils';
+  import { fromGweiToMatic } from '../utils';
   import { showNotification } from '../stores/notificationStore';
   import { walletStore } from '../stores/walletStore';
   import BigNumber from 'bignumber.js';
-
+  import { default as defaultColors } from '../config/colors.json';
+  import { colorStore } from '../stores/colorStore';
+  
   let layerSliderValue = 0;
   let currentCost: BigNumber;
   let selectedSquare: SVGRectElement | null = null;
+  let selectedColor = '#000000';
 
   $: selectedSquare = $canvasStore.selectedSquare;
-  $: {
-    console.log('PurchaseCard: Selected square updated', selectedSquare);
-    if (selectedSquare) {
-      const squareValue = selectedSquare.getAttribute('data-squareValue');
-      console.log('Square value:', squareValue);
-    }
-  }
-
   $: isWalletConnected = $walletStore.isConnected;
 
   $: {
     if (layerSliderValue > 0 && selectedSquare) {
-      const squareValue = selectedSquare.getAttribute('data-squareValue');
-      currentCost = blockchainStore.calculateTotalValueToSend(new BigNumber(layerSliderValue), new BigNumber(squareValue || '0'));
+      const squareValue = new BigNumber(selectedSquare.getAttribute('data-squareValue') || '0');
+      const valueInMatic = new BigNumber(fromGweiToMatic(squareValue));
+      currentCost = valueInMatic.multipliedBy(layerSliderValue);
     } else {
       currentCost = new BigNumber(0);
     }
@@ -41,18 +36,23 @@
     }
   }
 
-  function decreaseValue() {
+  function decreaseLayer() {
     if (layerSliderValue > 0) {
       layerSliderValue--;
       handleLayerSliderUpdate();
     }
   }
 
-  function increaseValue() {
+  function increaseLayer() {
     if (layerSliderValue < 10) {
       layerSliderValue++;
       handleLayerSliderUpdate();
     }
+  }
+
+  function setColor(color: string) {
+    selectedColor = color;
+    colorStore.set(color)
   }
 
   async function buyLayer() {
@@ -65,15 +65,13 @@
       return;
     }
     try {
-      const currentFill = selectedSquare.getAttribute('fill') || '#000';
       const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
       const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
       const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
 
-      await blockchainStore.buyLayers(x, y, layerSliderValue, currentFill, stage);
+      await blockchainStore.buyLayers(x, y, layerSliderValue, selectedColor, stage);
       showNotification(`Successfully purchased ${layerSliderValue} layers!`);
       
-      // Reset the slider after purchase
       layerSliderValue = 0;
       handleLayerSliderUpdate();
     } catch (error) {
@@ -85,103 +83,157 @@
 
 <div class="purchase-card">
   <h2>Purchase</h2>
-  <div class="slider-controls">
-    <button on:click={decreaseValue}>-</button>
-    <div id="slider-value">{layerSliderValue}</div>
-    <button on:click={increaseValue}>+</button>
+  <div class="color-selection">
+    <h3>Select Color</h3>
+    <div class="color-options">
+      {#each defaultColors as color}
+        <div
+          class="color-option"
+          style="background-color: {color}"
+          on:click={() => setColor(color)}
+        ></div>
+      {/each}
+    </div>
   </div>
-  <input
-    type="range"
-    min="0"
-    max="10"
-    bind:value={layerSliderValue}
-    on:input={handleLayerSliderUpdate}
-  />
+  <div class="layer-selection">
+    <h3>Select Layers</h3>
+    <div class="layer-controls">
+      <button on:click={decreaseLayer} class="layer-button">-</button>
+      <div class="layer-display">{layerSliderValue}</div>
+      <button on:click={increaseLayer} class="layer-button">+</button>
+    </div>
+    <input
+      type="range"
+      min="0"
+      max="10"
+      bind:value={layerSliderValue}
+      on:input={handleLayerSliderUpdate}
+    />
+  </div>
   <span id="current-cost-container">
     <p>Total Cost</p>
-    <span id="current-cost">{fromWeiToMatic(currentCost)} MATIC</span>
+    <span id="current-cost">{currentCost.toFixed(4)} MATIC</span>
   </span>
   <button on:click={buyLayer} disabled={!isWalletConnected || !selectedSquare || layerSliderValue === 0}>
     Buy {layerSliderValue > 1 ? 'Layers' : 'Layer'}
   </button>
 </div>
 
-
 <style>
   .purchase-card {
-    border: 1px solid rgba(0, 0, 0, 0.3);
-    border-radius: 10px;
-    padding: 20px;
-    margin-bottom: 15px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s;
-    background: linear-gradient(135deg, rgba(60, 45, 80, 1) 0%, rgba(67, 52, 97, 1) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    background: linear-gradient(135deg, rgba(40, 30, 60, 1) 0%, rgba(60, 40, 80, 1) 100%);
   }
 
-  .purchase-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.3);
-  }
-
-  h2 {
+  h2, h3 {
     text-align: center;
-    margin-bottom: 15px;
-    color: #e0e0e0;
+    margin-bottom: 20px;
+    color: #f0f0f0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
-  .slider-controls {
+  .color-selection, .layer-selection {
+    margin-bottom: 25px;
+  }
+
+  .color-options {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 15px;
+  }
+
+  .color-option {
+    width: 35px;
+    height: 35px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .color-option:hover {
+    transform: scale(1.15);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .layer-controls {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
   }
 
-  .slider-controls button {
-    background-color: #535;
-    color: #e0e0e0;
+  .layer-button {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #f0f0f0;
     border: none;
-    padding: 5px 10px;
-    border-radius: 5px;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
     cursor: pointer;
-    transition: background-color 0.3s;
-    font-size: 1rem;
+    transition: background-color 0.2s, transform 0.1s;
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
-  .slider-controls button:hover {
-    background-color: #747;
+  .layer-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+  }
+
+  .layer-display {
+    font-size: 24px;
+    font-weight: bold;
+    color: #f0f0f0;
+    margin: 0 20px;
+    width: 40px;
+    text-align: center;
   }
 
   input[type="range"] {
-    width: 100%;
-    margin-bottom: 15px;
     -webkit-appearance: none;
-    background: transparent;
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+    border-radius: 3px;
+    margin-top: 10px;
   }
 
   input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    height: 16px;
-    width: 16px;
-    border-radius: 50%;
+    appearance: none;
+    width: 22px;
+    height: 22px;
     background: #a8a8f8;
     cursor: pointer;
-    margin-top: -5px;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
-  input[type="range"]::-webkit-slider-runnable-track {
-    width: 100%;
-    height: 6px;
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    background: #a8a8f8;
     cursor: pointer;
-    background: #535;
-    border-radius: 3px;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   }
 
   #current-cost-container {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 15px;
+    margin-bottom: 20px;
   }
 
   #current-cost-container p {
@@ -190,25 +242,31 @@
   }
 
   #current-cost {
-    font-size: 1.2em;
+    font-size: 1.4em;
     font-weight: bold;
     color: #a8a8f8;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   button {
     width: 100%;
-    padding: 10px;
-    background-color: #535;
-    color: #e0e0e0;
+    padding: 12px;
+    background-color: #6a5acd;
+    color: #ffffff;
     border: none;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.3s;
-    font-size: 1rem;
+    transition: background-color 0.3s, transform 0.1s;
+    font-size: 1.1rem;
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   }
 
   button:hover:not(:disabled) {
-    background-color: #747;
+    background-color: #7b68ee;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
   }
 
   button:disabled {
