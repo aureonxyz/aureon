@@ -1,16 +1,57 @@
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
-  import { roundToTwoSignificantFigures } from '../utils';
-  import type { CustomRectOptions } from '$pixelflux/interfaces';
+  import { blockchainStore } from '../stores/blockchainStore';
+  import { fromGweiToMatic } from '../utils';
+  import BigNumber from 'bignumber.js';
+  import type { Layer } from '../interfaces';
 
-  $: selectedSquare = $canvasStore.selectedSquare as CustomRectOptions | null;
-  $: currentLayerNumber = selectedSquare?.squareLayers?.length ?? 0;
-  $: currentValue = selectedSquare
-    ? roundToTwoSignificantFigures((selectedSquare.squareValue ?? 0) * currentLayerNumber)
-    : 0;
-  $: coordinates = selectedSquare
-    ? `x: ${selectedSquare.gridX}, y: ${selectedSquare.gridY + selectedSquare.yOffset}`
-    : 'No pixel selected';
+  let squareLayers: Layer[] = [];
+  
+  $: selectedSquare = $canvasStore.selectedSquare;
+  $: squareValue = new BigNumber(0);
+  $: currentLayerNumber = 0;
+  $: currentValue = '0';
+  $: coordinates = 'No pixel selected';
+  $: originalFill = '#000';
+  $: currentFill = '#000';
+
+  $: {
+    console.log('PixelCard: Reactive block triggered');
+    console.log('PixelCard: selectedSquare', selectedSquare);
+
+    if (selectedSquare) {
+      const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+      const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+      const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+      squareLayers = $blockchainStore.stages[stage]?.cells[y]?.[x]?.layers || [];
+      squareValue = $blockchainStore.stages[stage]?.cells[y]?.[x]?.baseValue || new BigNumber(0);
+      currentLayerNumber = squareLayers.length;
+
+      const valueInMatic = new BigNumber(fromGweiToMatic(squareValue));
+      const totalValue = valueInMatic.multipliedBy(currentLayerNumber || 1);
+      currentValue = totalValue.toFixed(4);  // Display 4 decimal places
+
+      coordinates = `x: ${x}, y: ${y}`;
+      originalFill = selectedSquare.getAttribute('data-originalFill') || '#000';
+      currentFill = selectedSquare.getAttribute('fill') || '#000';
+
+      console.log('PixelCard updated:', { 
+        squareValue: squareValue.toString(), 
+        currentLayerNumber, 
+        valueInMatic: valueInMatic.toString(), 
+        currentValue, 
+        coordinates 
+      });
+    } else {
+      console.log('PixelCard: No square selected');
+      squareLayers = [];
+      currentValue = '0';
+      coordinates = 'No pixel selected';
+      originalFill = '#000';
+      currentFill = '#000';
+    }
+  }
 
   function handleHover(element: 'current' | 'preview', isHovered: boolean): void {
     const selector = element === 'current' ? '.pixel-current' : '.pixel-preview';
@@ -20,12 +61,14 @@
     }
   }
 </script>
+
+
 <div class="pixel-card">
   <h3>Selected Pixel</h3>
   <div class="pixel-display-container">
     <div
       class="pixel-current"
-      style="background-color: {selectedSquare?.originalFill || '#000'}"
+      style="background-color: {originalFill}"
       on:mouseenter={() => handleHover('current', true)}
       on:mouseleave={() => handleHover('current', false)}
       role="img"
@@ -34,7 +77,7 @@
     <span class="arrow" aria-hidden="true">&rarr;</span>
     <div
       class="pixel-preview"
-      style="background-color: {selectedSquare?.fill || '#000'}"
+      style="background-color: {currentFill}"
       on:mouseenter={() => handleHover('preview', true)}
       on:mouseleave={() => handleHover('preview', false)}
       role="img"
@@ -42,8 +85,8 @@
     ></div>
   </div>
   <div class="pixel-properties">
-    <p>Layer: <span class="highlight">{currentLayerNumber - 1}</span></p>
-    <p>Value: <span class="highlight">{currentValue} Matic</span></p>
+    <p>Layer: <span class="highlight">{currentLayerNumber}</span></p>
+    <p>Value: <span class="highlight">{currentValue} Matic</p>
     <p>Coordinates: <span class="highlight">{coordinates}</span></p>
   </div>
 </div>

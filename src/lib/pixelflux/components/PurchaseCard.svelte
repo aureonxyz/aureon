@@ -1,6 +1,7 @@
+
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
-  import { calculateTotalValueToSend, handlePurchaseClick } from '../purchaseLogic';
+  import { blockchainStore } from '../stores/blockchainStore';
   import { fromWeiToMatic } from '../utils';
   import { showNotification } from '../stores/notificationStore';
   import { walletStore } from '../stores/walletStore';
@@ -8,24 +9,35 @@
 
   let layerSliderValue = 0;
   let currentCost: BigNumber;
+  let selectedSquare: SVGRectElement | null = null;
 
   $: selectedSquare = $canvasStore.selectedSquare;
+  $: {
+    console.log('PurchaseCard: Selected square updated', selectedSquare);
+    if (selectedSquare) {
+      const squareValue = selectedSquare.getAttribute('data-squareValue');
+      console.log('Square value:', squareValue);
+    }
+  }
+
   $: isWalletConnected = $walletStore.isConnected;
 
   $: {
     if (layerSliderValue > 0 && selectedSquare) {
-      currentCost = calculateTotalValueToSend(new BigNumber(layerSliderValue), new BigNumber(selectedSquare.squareValue));
+      const squareValue = selectedSquare.getAttribute('data-squareValue');
+      currentCost = blockchainStore.calculateTotalValueToSend(new BigNumber(layerSliderValue), new BigNumber(squareValue || '0'));
     } else {
       currentCost = new BigNumber(0);
     }
   }
 
   function handleLayerSliderUpdate() {
-    if (layerSliderValue === 0 && selectedSquare && selectedSquare.fill !== selectedSquare.originalFill) {
-      canvasStore.update(state => ({
-        ...state,
-        selectedSquare: selectedSquare ? { ...selectedSquare, fill: selectedSquare.originalFill } : null
-      }));
+    if (layerSliderValue === 0 && selectedSquare) {
+      const originalFill = selectedSquare.getAttribute('data-originalFill');
+      if (originalFill && selectedSquare.getAttribute('fill') !== originalFill) {
+        selectedSquare.setAttribute('fill', originalFill);
+        canvasStore.setSelectedSquare(selectedSquare);
+      }
     }
   }
 
@@ -53,7 +65,12 @@
       return;
     }
     try {
-      await handlePurchaseClick(layerSliderValue, selectedSquare.fill as string);
+      const currentFill = selectedSquare.getAttribute('fill') || '#000';
+      const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+      const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+      const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+      await blockchainStore.buyLayers(x, y, layerSliderValue, currentFill, stage);
       showNotification(`Successfully purchased ${layerSliderValue} layers!`);
       
       // Reset the slider after purchase

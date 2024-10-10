@@ -5,12 +5,18 @@
   import PurchaseCard from './PurchaseCard.svelte';
   import HistoryCard from './HistoryCard.svelte';
   import { canvasStore } from '../stores/canvasStore';
+  import { sidebarStore } from '../stores/sidebarStore';
   
   let isMobile: boolean;
   $: showPixelDetails = !!$canvasStore.selectedSquare;
   
   function checkMobile() {
     isMobile = window.innerWidth <= 768; // Adjust this breakpoint as needed
+    if (isMobile) {
+      sidebarStore.close();
+    } else {
+      sidebarStore.open();
+    }
   }
   
   onMount(() => {
@@ -21,6 +27,9 @@
   
   function closeSidebar() {
     $canvasStore.selectedSquare = null;
+    if (!isMobile) {
+      sidebarStore.close();
+    }
   }
   
   function goHome() {
@@ -45,7 +54,7 @@
       </div>
     {/if}
   {:else}
-    <div class="sidebar">
+    <div class="sidebar" style="width: {$sidebarStore.width}px; transform: translateX({$sidebarStore.isOpen ? '0' : '-100%'});">
       <button class="home-button" on:click={goHome}>Home</button>
       {#if showPixelDetails}
         <PixelCard />
@@ -72,6 +81,7 @@
     left: 0;
     top: 0;
     bottom: 0;
+    transition: transform 0.3s ease-in-out;
   }
   
   .modal {

@@ -1,6 +1,5 @@
-import { fabric } from 'fabric';
 import { CANVAS_CONFIG, STAGE_DISABLED_HEIGHT, STAGE_THRESHOLDS } from '../canvasConfig';
-import type { Stage, CustomRectOptions, Cell, TextLabelWithId } from '../interfaces';
+import type { Stage, Cell } from '../interfaces';
 import { fromGweiToMatic } from '../utils';
 import stage2LockedImage from '../assets/stage2_locked.jpg';
 import stage3LockedImage from '../assets/stage3_locked.jpg';
@@ -8,23 +7,24 @@ import { canvasStore } from '../stores/canvasStore';
 import { get } from 'svelte/store';
 
 export class CanvasManager {
-  canvas: fabric.Canvas;
+  svg: SVGSVGElement;
   canvasContainer: HTMLDivElement;
 
   constructor(canvasContainer: HTMLDivElement) {
     this.canvasContainer = canvasContainer;
-    this.canvas = this.createCanvas();
+    this.svg = this.createSVG();
+    this.canvasContainer.appendChild(this.svg);
   }
 
-  createCanvas(): fabric.Canvas {
-    const canvas = new fabric.Canvas('pixelflux-canvas');
-    canvas.backgroundColor = CANVAS_CONFIG.BACKGROUND_COLOR;
-    canvas.renderAll();
-    return canvas;
+  createSVG(): SVGSVGElement {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("id", "pixelflux-svg");
+    svg.style.backgroundColor = CANVAS_CONFIG.BACKGROUND_COLOR;
+    return svg;
   }
 
   updateCanvas(stages: Stage[], totalValues: any[]): void {
-    this.canvas.clear();
+    this.svg.innerHTML = '';  // Clear the SVG
     this.setCanvasDimensions(stages);
 
     let yOffset = 0;
@@ -37,208 +37,169 @@ export class CanvasManager {
         break;
       }
     }
-    this.resizeCanvas();
   }
 
   setCanvasDimensions(stages: Stage[]): void {
     const gridWidth = this.getGridWidth(stages);
     const totalHeight = this.getTotalHeight(stages);
-    this.canvas.setWidth(gridWidth * CANVAS_CONFIG.CELL_SIZE);
-    this.canvas.setHeight(totalHeight * CANVAS_CONFIG.CELL_SIZE);
+    this.svg.setAttribute("width", `${gridWidth * CANVAS_CONFIG.CELL_SIZE}`);
+    this.svg.setAttribute("height", `${totalHeight * CANVAS_CONFIG.CELL_SIZE}`);
   }
 
   setupCanvasContent(allCells: Cell[][], yOffset: number, stage: number): void {
     const gridHeight = allCells.length;
     const gridWidth = allCells[0].length;
-    const gridImageUrl = this.generateGridImage(gridWidth, gridHeight);
-    this.canvas.setBackgroundColor(gridImageUrl, () => this.canvas.renderAll());
-    this.canvas.backgroundColor = "#000";
 
-    const squares: fabric.Rect[] = [];
     for (let y = 0; y < gridHeight; y++) {
       for (let x = 0; x < gridWidth; x++) {
-        let fillColor = "#000";
         let cell = allCells[y][x];
-        let currentValue = Number(fromGweiToMatic(cell.baseValue));
-        if (cell.layers.length > 0) {
-          fillColor = cell.layers[cell.layers.length - 1].color;
-        }
-        const square = new fabric.Rect({
-          width: CANVAS_CONFIG.CELL_SIZE,
-          height: CANVAS_CONFIG.CELL_SIZE,
-          stroke: CANVAS_CONFIG.GRID_COLOR,
-          fill: fillColor,
-          lockMovementX: true,
-          lockMovementY: true,
-          hasControls: false,
-          hoverCursor: 'pointer',
-          squareLayers: cell.layers,
-          gridX: x,
-          gridY: y,
-          stage: stage,
-          yOffset: yOffset,
-          top: (CANVAS_CONFIG.CELL_SIZE * y) + (yOffset * CANVAS_CONFIG.CELL_SIZE),
-          left: (CANVAS_CONFIG.CELL_SIZE * x),
-          originalFill: fillColor,
-          squareValue: currentValue,
-        } as fabric.IRectOptions & CustomRectOptions);
+        let fillColor = cell.layers.length > 0 ? cell.layers[cell.layers.length - 1].color : "#000";
 
-        square.on('mousedown', (e) => this.handleSquareClick(e));
-        squares.push(square);
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttribute("x", `${x * CANVAS_CONFIG.CELL_SIZE}`);
+        rect.setAttribute("y", `${(y + yOffset) * CANVAS_CONFIG.CELL_SIZE}`);
+        rect.setAttribute("width", `${CANVAS_CONFIG.CELL_SIZE}`);
+        rect.setAttribute("height", `${CANVAS_CONFIG.CELL_SIZE}`);
+        rect.setAttribute("fill", fillColor);
+        rect.setAttribute("stroke", CANVAS_CONFIG.GRID_COLOR);
+        rect.setAttribute("data-gridX", x.toString());
+        rect.setAttribute("data-gridY", y.toString());
+        rect.setAttribute("data-stage", stage.toString());
+        rect.setAttribute("data-yOffset", yOffset.toString());
+        rect.setAttribute("data-originalFill", fillColor);
+        rect.setAttribute("data-squareValue", cell.baseValue.toString());
+        rect.setAttribute("data-squareLayers", JSON.stringify(cell.layers));
+
+        rect.addEventListener('mousedown', (e) => this.handleSquareClick(e));
+        rect.addEventListener('mouseover', () => this.handleSquareHover(rect));
+        rect.addEventListener('mouseout', () => this.handleSquareHoverOut(rect));
+        this.svg.appendChild(rect);
       }
     }
-    this.canvas.add(...squares);
-    this.canvas.renderAll();
   }
 
   setupDisabledStageContent(stageIndex: number, yOffset: number, totalValues: any[]): void {
     const imageUrl = stageIndex === 1 ? stage2LockedImage : stage3LockedImage;
     const gridWidth = this.getGridWidth(get(canvasStore).stages);
   
-    fabric.Image.fromURL(imageUrl, (img) => {
-      if (!img) {
-        console.error(`Failed to load image for stage ${stageIndex + 1}`);
-        return;
-      }
-  
-      const scaleFactor = (STAGE_DISABLED_HEIGHT * CANVAS_CONFIG.CELL_SIZE) / (img.height || 1);
-  
-      img.set({
-        left: 0,
-        top: yOffset * CANVAS_CONFIG.CELL_SIZE,
-        selectable: false,
-        scaleX: scaleFactor,
-        scaleY: scaleFactor
-      });
-  
-      const overlayRect = new fabric.Rect({
-        left: -1,
-        top: img.top ?? 0,
-        width: ((img.width ?? 100) * scaleFactor) + 2,
-        height: ((img.height ?? 100) * scaleFactor),
-        fill: 'rgba(0, 0, 0, 0.5)',
-        selectable: false
-      });
-  
-      this.canvas.add(img, overlayRect);
-  
-      const middleY = (img.top ?? 0) + ((img.height ?? 100) * scaleFactor) / 2;
-      const labelLeftPosition = gridWidth * CANVAS_CONFIG.CELL_SIZE * 0.5;
-      
-      const stageLabel = this.createTextLabel(`STAGE ${stageIndex + 1}`, {
-        left: labelLeftPosition,
-        top: middleY - 140,
-        fontSize: 60,
-        fill: 'white'
-      }, 'stageLabel');
-  
-      const notEnabledLabel = this.createTextLabel('Locked', {
-        left: labelLeftPosition,
-        top: middleY + 60,
-        fontSize: 60,
-        fill: 'red'
-      }, 'lockedLabel');
-  
-      const stage1Value = Number(fromGweiToMatic(totalValues[0]));
-      const stage2Value = Number(fromGweiToMatic(totalValues[1]));
-      const requiredTotalValueText = this.getRequiredTotalValueText(stageIndex, stage1Value, stage2Value);
-      if (this.isStageCompleted(stageIndex, stage1Value, stage2Value)) {
-        notEnabledLabel.text = 'Waiting for owner unlock';
-        notEnabledLabel.fill = 'green';
-      }
-  
-      const requiredValueLabel = this.createTextLabel(requiredTotalValueText, {
-        left: labelLeftPosition,
-        top: middleY - 50,
-        fontSize: 30,
-        fill: 'yellow'
-      }, 'requiredLabel');
-  
-      this.canvas.add(stageLabel, notEnabledLabel, requiredValueLabel);
-      this.canvas.renderAll();
-  
-      console.log(`Disabled stage ${stageIndex + 1} content added to canvas`);
-    });
+    const img = document.createElementNS("http://www.w3.org/2000/svg", "image");
+    img.setAttribute("href", imageUrl);
+    img.setAttribute("x", "0");
+    img.setAttribute("y", `${yOffset * CANVAS_CONFIG.CELL_SIZE}`);
+    img.setAttribute("width", `${gridWidth * CANVAS_CONFIG.CELL_SIZE}`);
+    img.setAttribute("height", `${STAGE_DISABLED_HEIGHT * CANVAS_CONFIG.CELL_SIZE}`);
+    this.svg.appendChild(img);
+
+    const overlay = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    overlay.setAttribute("x", "0");
+    overlay.setAttribute("y", `${yOffset * CANVAS_CONFIG.CELL_SIZE}`);
+    overlay.setAttribute("width", `${gridWidth * CANVAS_CONFIG.CELL_SIZE}`);
+    overlay.setAttribute("height", `${STAGE_DISABLED_HEIGHT * CANVAS_CONFIG.CELL_SIZE}`);
+    overlay.setAttribute("fill", "rgba(0, 0, 0, 0.5)");
+    this.svg.appendChild(overlay);
+
+    const middleY = yOffset * CANVAS_CONFIG.CELL_SIZE + (STAGE_DISABLED_HEIGHT * CANVAS_CONFIG.CELL_SIZE / 2);
+    const labelLeftPosition = gridWidth * CANVAS_CONFIG.CELL_SIZE * 0.5;
+    
+    this.createTextLabel(`STAGE ${stageIndex + 1}`, {
+      x: labelLeftPosition,
+      y: middleY - 140,
+      fontSize: 60,
+      fill: 'white'
+    }, 'stageLabel');
+
+    const notEnabledLabel = this.createTextLabel('Locked', {
+      x: labelLeftPosition,
+      y: middleY + 60,
+      fontSize: 60,
+      fill: 'red'
+    }, 'lockedLabel');
+
+    const stage1Value = Number(fromGweiToMatic(totalValues[0]));
+    const stage2Value = Number(fromGweiToMatic(totalValues[1]));
+    const requiredTotalValueText = this.getRequiredTotalValueText(stageIndex, stage1Value, stage2Value);
+    if (this.isStageCompleted(stageIndex, stage1Value, stage2Value)) {
+      notEnabledLabel.textContent = 'Waiting for owner unlock';
+      notEnabledLabel.setAttribute('fill', 'green');
+    }
+
+    this.createTextLabel(requiredTotalValueText, {
+      x: labelLeftPosition,
+      y: middleY - 50,
+      fontSize: 30,
+      fill: 'yellow'
+    }, 'requiredLabel');
   }
-  resizeCanvas = (): void => {
-    if (this.canvasContainer && this.canvas) {
-      const { clientWidth: containerWidth, clientHeight: containerHeight } = this.canvasContainer;
-      const sidebarWidth = 260; // Width of the sidebar
+  
+  resizeCanvas = (sidebarWidth: number): void => {
+    if (this.canvasContainer && this.svg) {
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
       
       const gridWidth = this.getGridWidth(get(canvasStore).stages);
       const gridHeight = this.getTotalHeight(get(canvasStore).stages);
       
-      // Calculate available width for canvas
-      const availableWidth = containerWidth - sidebarWidth;
-      
-      // Calculate scale based on available width
-      const scale = availableWidth / (gridWidth * CANVAS_CONFIG.CELL_SIZE);
-      
-      // Set canvas dimensions
-      const canvasWidth = availableWidth;
-      const canvasHeight = Math.min(containerHeight, gridHeight * CANVAS_CONFIG.CELL_SIZE * scale);
-      
-      this.canvas.setWidth(canvasWidth);
-      this.canvas.setHeight(canvasHeight);
-      this.canvas.setZoom(scale);
-      
-      // Align top-left
-      const vpt = this.canvas.viewportTransform;
-      if (vpt) {
-        vpt[4] = 0; // Left align
-        vpt[5] = 0; // Top align
-      }
-      
-      this.canvas.renderAll();
-      
-      console.log(`Canvas resized to ${canvasWidth}x${canvasHeight} with zoom ${scale}`);
+      const canvasWidth = gridWidth * CANVAS_CONFIG.CELL_SIZE;
+      const canvasHeight = gridHeight * CANVAS_CONFIG.CELL_SIZE;
+  
+      this.svg.setAttribute("width", `${canvasWidth}`);
+      this.svg.setAttribute("height", `${canvasHeight}`);
+  
+      const availableWidth = windowWidth - sidebarWidth;
+      const availableHeight = windowHeight;
+  
+      const scaleX = availableWidth / canvasWidth;
+      const scaleY = availableHeight / canvasHeight;
+      const scale = Math.min(scaleX, scaleY, 1);
+  
+      const translateX = (availableWidth - canvasWidth * scale) / 2;
+      const translateY = (availableHeight - canvasHeight * scale) / 2;
+  
+      this.svg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+      this.svg.style.transformOrigin = "top left";
+  
+      this.canvasContainer.style.width = `${availableWidth}px`;
+      this.canvasContainer.style.height = `${availableHeight}px`;
     }
   }
-  handleSquareClick = (e: fabric.IEvent): void => {
-    if (!e.target) return;
-    const clickedSquare = e.target as fabric.Rect & CustomRectOptions;
 
-    const currentState = get(canvasStore);
-    if (currentState.selectedSquare && currentState.selectedSquare !== clickedSquare) {
-      (currentState.selectedSquare as unknown as fabric.Rect).set('strokeWidth', 1);
-      (currentState.selectedSquare as unknown as fabric.Rect).set('fill', currentState.selectedSquare.originalFill);
+
+  handleSquareClick = (e: MouseEvent): void => {
+    const clickedSquare = e.target as SVGRectElement;
+    if (!clickedSquare) return;
+  
+    const gridX = clickedSquare.getAttribute('data-gridX');
+    const gridY = clickedSquare.getAttribute('data-gridY');
+    const stage = clickedSquare.getAttribute('data-stage');
+    const squareValue = clickedSquare.getAttribute('data-squareValue');
+    const originalFill = clickedSquare.getAttribute('data-originalFill');
+    const fill = clickedSquare.getAttribute('fill');
+  
+    console.log('Square clicked:', { gridX, gridY, stage, squareValue, originalFill, fill });
+  
+    canvasStore.setSelectedSquare(clickedSquare);
+  }
+
+  handleSquareHover = (square: SVGRectElement): void => {
+    square.setAttribute("stroke-width", "2");
+    square.setAttribute("stroke", "#FFFF00");  // Hover color
+  }
+
+  handleSquareHoverOut = (square: SVGRectElement): void => {
+    if (square !== get(canvasStore).selectedSquare) {
+      square.setAttribute("stroke-width", "1");
+      square.setAttribute("stroke", CANVAS_CONFIG.GRID_COLOR);
     }
-    (clickedSquare as fabric.Rect).set('strokeWidth', 4);
-    canvasStore.update(state => ({ ...state, selectedSquare: clickedSquare }));
   }
 
   getGridWidth(stages: Stage[]): number {
-    const width = stages[0]?.cells[0]?.length || 0;
-    return width;
+    return stages[0]?.cells[0]?.length || 0;
   }
 
   getTotalHeight(stages: Stage[]): number {
     const contentHeight = stages.reduce((acc, stage) => acc + stage.cells.length, 0);
     const hasDisabledStage = stages.some(stage => !stage.isEnabled);
-    const totalHeight = contentHeight + (hasDisabledStage ? STAGE_DISABLED_HEIGHT : 0);
-    return totalHeight;
-  }
-
-  generateGridImage(gridWidth: number, gridHeight: number): string {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = gridWidth * CANVAS_CONFIG.CELL_SIZE;
-    tempCanvas.height = gridHeight * CANVAS_CONFIG.CELL_SIZE;
-
-    const ctx = tempCanvas.getContext('2d')!; 
-
-    for (let x = 0; x <= gridWidth; x += CANVAS_CONFIG.CELL_SIZE) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, gridWidth);
-    }
-
-    for (let y = 0; y <= gridHeight; y += CANVAS_CONFIG.CELL_SIZE) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(gridHeight, y);
-    }
-
-    ctx.stroke();
-
-    return tempCanvas.toDataURL();
+    return contentHeight + (hasDisabledStage ? STAGE_DISABLED_HEIGHT : 0);
   }
 
   isStageCompleted(stageIndex: number, stage1Value: number, stage2Value: number): boolean {
@@ -270,29 +231,30 @@ export class CanvasManager {
     return "";
   }
 
-  createTextLabel(text: string, options: fabric.ITextOptions, id?: string): fabric.Text {
-    const defaultOptions = {
-      fontFamily: 'kirbyss',
-      originX: 'center',
-      selectable: false
-    };
-
-    const textLabel: TextLabelWithId = new fabric.Text(text, { ...defaultOptions, ...options }) as TextLabelWithId;
+  createTextLabel(text: string, options: { x: number, y: number, fontSize: number, fill: string }, id?: string): SVGTextElement {
+    const textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    textElement.setAttribute("x", options.x.toString());
+    textElement.setAttribute("y", options.y.toString());
+    textElement.setAttribute("font-size", options.fontSize.toString());
+    textElement.setAttribute("fill", options.fill);
+    textElement.setAttribute("text-anchor", "middle");
+    textElement.setAttribute("font-family", "kirbyss");
+    textElement.textContent = text;
     if (id) {
-      textLabel.id = id;
+      textElement.id = id;
     }
-    return textLabel;
+    this.svg.appendChild(textElement);
+    return textElement;
   }
 
-  getTextLabelById(id: string): TextLabelWithId | undefined {
-    const label = this.canvas.getObjects().find((obj: any) => obj.type === 'text' && obj.id === id) as TextLabelWithId;
-    return label;
+  getTextLabelById(id: string): SVGTextElement | null {
+    return this.svg.querySelector(`#${id}`);
   }
 
   dispose(): void {
-    console.log('CanvasManager: Disposing canvas');
-    if (this.canvas) {
-      this.canvas.dispose();
+    console.log('CanvasManager: Disposing SVG');
+    if (this.svg && this.svg.parentNode) {
+      this.svg.parentNode.removeChild(this.svg);
     }
   }
 }

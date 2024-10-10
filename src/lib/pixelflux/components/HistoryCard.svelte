@@ -1,35 +1,69 @@
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
+  import { blockchainStore } from '../stores/blockchainStore';
   import { roundToTwoSignificantFigures } from '../utils';
-  import type { Writable } from 'svelte/store';
+  import BigNumber from 'bignumber.js';
+
+  import type { Layer } from '../interfaces';
+
+  let squareLayers: Layer[] = [];
   
   const ITEMS_PER_PAGE = 5;
   let currentPage = 1;
- 
-  $: pixelData = $canvasStore.selectedSquare 
-    ? [...$canvasStore.selectedSquare.squareLayers].reverse().map((layer, index) => ({
-        color: layer.color || "#000",
-        value: roundToTwoSignificantFigures(
-          $canvasStore.selectedSquare 
-            ? $canvasStore.selectedSquare.squareValue * ($canvasStore.selectedSquare.squareLayers.length - index)
-            : 0
-        ),
-        contractAddress: layer.owner
-      })) 
-    : [];
- 
+
+  $: selectedSquare = $canvasStore.selectedSquare;
+  $: squareValue = new BigNumber(0);
+
+  $: {
+    console.log('HistoryCard: Reactive block triggered');
+    console.log('HistoryCard: selectedSquare', selectedSquare);
+
+    if (selectedSquare) {
+      const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+      const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+      const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+      squareLayers = $blockchainStore.stages[stage]?.cells[y]?.[x]?.layers || [];
+      squareValue = $blockchainStore.stages[stage]?.cells[y]?.[x]?.baseValue || new BigNumber(0);
+
+      console.log('HistoryCard updated:', { 
+        squareValue: squareValue.toString(), 
+        squareLayers 
+      });
+    } else {
+      console.log('HistoryCard: No square selected');
+      squareLayers = [];
+      squareValue = new BigNumber(0);
+    }
+  }
+  $: pixelData = selectedSquare && squareLayers.length > 0
+  ? [...squareLayers].reverse().map((layer, index) => ({
+      color: layer.color || "#000",
+      value: roundToTwoSignificantFigures(
+        (squareValue instanceof BigNumber 
+          ? squareValue 
+          : new BigNumber(squareValue)
+        ).multipliedBy(squareLayers.length - index).toNumber()
+      ),
+      contractAddress: layer.owner
+    }))
+  : [];
+
+
   $: displayedItems = pixelData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   $: totalPages = Math.ceil(pixelData.length / ITEMS_PER_PAGE);
- 
+
   function prevPage() {
     if (currentPage > 1) currentPage--;
   }
- 
+
   function nextPage() {
     if (currentPage < totalPages) currentPage++;
   }
- </script>
- 
+</script>
+
+
+
  <div class="history-card">
    <h2>History</h2>
    <ul id="history">

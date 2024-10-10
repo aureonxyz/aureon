@@ -17,8 +17,7 @@
     "@tauri-apps/plugin-shell": ">=2.0.0",
     "bignumber.js": "^9.1.2",
     "dotenv": "^16.4.5",
-    "ethers": "^6.13.3",
-    "fabric": "5.1"
+    "ethers": "^6.13.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.1",

@@ -1,19 +1,7 @@
 // src/lib/pixelflux/interfaces.ts
-import type { fabric } from "fabric";
 import type { Contract } from "ethers";
+import type { Writable } from 'svelte/store';
 import type BigNumber from "bignumber.js";
-
-export interface CustomRectOptions extends fabric.IRectOptions {
-  gridX: number;
-  gridY: number;
-  stage: number;
-  squareValue: number; 
-  squareLayers: Layer[];
-  originalFill: string;
-  fill?: string; 
-}
-
-
 
 export interface Layer {
   owner: string;
@@ -30,10 +18,6 @@ export interface Stage {
   cells: Cell[][];
 }
 
-export interface TextLabelWithId extends fabric.Text {
-  id?: string;
-}
-
 export interface BlockchainState {
   stages: Stage[];
   totalValues: BigNumber[];
@@ -43,9 +27,29 @@ export interface BlockchainState {
   contracts: Contract[];
   websocketContracts: Contract[];
 }
+
+
+export interface BlockchainStore extends Writable<BlockchainState> {
+  fetchStages: () => Promise<{ stages: Stage[], totalValues: BigNumber[] }>;
+  buyLayers: (x: number, y: number, numLayersToAdd: number, color: string, stage: number) => Promise<void>;
+  getSelectedCellLayers: () => Layer[];
+  getSelectedCellValue: () => BigNumber;
+  getConnectedPolygonAccounts: () => Promise<string[]>;
+  calculateTotalValueToSend: (numLayersToAdd: BigNumber, baseValue: BigNumber) => BigNumber;
+}
+
 export interface CanvasState {
   stages: Stage[];
   totalValues: BigNumber[];
-  selectedSquare: CustomRectOptions | null;
-  canvas: fabric.Canvas | null;
+  selectedSquare: SVGRectElement | null;
+  svg: SVGSVGElement | null;
+}
+
+
+export interface CanvasStore extends Writable<CanvasState> {
+  setSvg: (svg: SVGSVGElement) => void;
+  setSelectedSquare: (square: SVGRectElement | null) => void;
+  updateCell: (buyer: string, x: number, y: number, numLayers: number, color: string, stageIndex: number) => void;
+  updateTotalValues: (newTotalValues: BigNumber[]) => void;
+  getSelectedSquare: () => SVGRectElement | null;
 }

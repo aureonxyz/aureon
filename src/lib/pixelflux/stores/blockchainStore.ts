@@ -3,13 +3,13 @@ import { writable, get } from 'svelte/store';
 import { Contract } from 'ethers';
 import BigNumber from "bignumber.js";
 
-import type { Stage, CustomRectOptions, Cell, BlockchainState, Layer } from '../interfaces';
+import type { Stage, Cell, BlockchainState, BlockchainStore, Layer } from '../interfaces';
 import contractConfig from '../config/contracts.json';
 import { getProvider, contractABIs, getWebsocketProvider } from '../blockchainProvider';
 import { canvasStore } from './canvasStore';
 import { showNotification } from './notificationStore';
 import { showWalletModal } from './walletModalStore';
-import type { fabric } from 'fabric';
+import { fromMaticToWei } from '../utils';
 
 const initialState: BlockchainState = {
   stages: [],
@@ -21,8 +21,13 @@ const initialState: BlockchainState = {
   websocketContracts: [],
 };
 
-function createBlockchainStore() {
+function createBlockchainStore(): BlockchainStore {
   const { subscribe, set, update } = writable<BlockchainState>(initialState);
+
+  const BASE_GAS = 500000;
+  const GAS_PER_EXISTING_LAYER = 20000;
+  const GAS_PER_NEW_LAYER = 15000;
+  const BUFFER_MULTIPLIER = 1.20;
 
   function setupEventListeners(wssContract: Contract, jsonContract: Contract, index: number) {
     wssContract.on('LayerPurchased', async (buyer: string, x: number, y: number, numLayers: number, color: string) => {
@@ -50,41 +55,7 @@ function createBlockchainStore() {
   }
 
   function updateCanvasCell(buyer: string, x: number, y: number, numLayers: number, color: string, stageIndex: number, updatedTotalValues: BigNumber[]) {
-    canvasStore.update(state => {
-      const canvas = state.canvas;
-      if (!canvas) {
-        console.warn('Canvas not found in canvasStore');
-        return state;
-      }
-
-      const square = canvas.getObjects().find((obj: any) => 
-        obj.gridX === x && obj.gridY === y && obj.stage === stageIndex
-      ) as fabric.Rect & CustomRectOptions;
-
-      if (square) {
-        square.set('fill', color);
-        square.originalFill = color;
-        const updatedLayers: Layer[] = [...(square.squareLayers || [])];
-
-        for (let i = 0; i < numLayers; i++) {
-          updatedLayers.push({
-            owner: buyer,
-            color: color
-          });
-        }
-        square.set('squareLayers', updatedLayers);
-      
-        if (state.selectedSquare && state.selectedSquare.gridX === x && state.selectedSquare.gridY === y && state.selectedSquare.stage === stageIndex) {
-          state.selectedSquare = square;
-        }
-      } else {
-        console.warn(`Square not found:`, { x, y, stageIndex });
-      }
-
-      canvas.renderAll();
-
-      return state;
-    });
+    canvasStore.updateCell(buyer, x, y, numLayers, color, stageIndex);
   }
 
   async function getConnectedPolygonAccounts(): Promise<string[]> {
@@ -159,48 +130,123 @@ function createBlockchainStore() {
     }
   }
 
-  async function buyLayer(x: number, y: number, stage: number, color: string) {
+  function calculateTotalValueToSend(numLayersToAdd: BigNumber, baseValue: BigNumber): BigNumber {
+    const state = get({ subscribe });
+    const selectedSquare = canvasStore.getSelectedSquare();
+    if (!selectedSquare) return new BigNumber(0);
+    
+    const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+    const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+    const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+    const currentLayersCount = state.stages[stage]?.cells[y]?.[x]?.layers.length || 0;
+
+    const baseValueInWei = new BigNumber(fromMaticToWei(baseValue.toNumber()));
+    const sumOfSeries = numLayersToAdd
+      .multipliedBy(new BigNumber(2).multipliedBy(currentLayersCount).plus(numLayersToAdd).minus(1))
+      .dividedBy(2);
+    const refundAmount = baseValueInWei
+      .multipliedBy(numLayersToAdd.multipliedBy(numLayersToAdd.minus(1)))
+      .dividedBy(2);
+    return baseValueInWei.multipliedBy(sumOfSeries).minus(refundAmount);
+  }
+
+  function estimateGas(numLayersToAdd: number): number {
+    const state = get({ subscribe });
+    const selectedSquare = canvasStore.getSelectedSquare();
+    if (!selectedSquare) return 0;
+    
+    const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+    const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+    const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+    const currentLayersCount = state.stages[stage]?.cells[y]?.[x]?.layers.length || 0;
+
+    return Math.ceil((
+      BASE_GAS +
+      (GAS_PER_EXISTING_LAYER * currentLayersCount) +
+      (GAS_PER_NEW_LAYER * numLayersToAdd)
+    ) * BUFFER_MULTIPLIER);
+  }
+
+  async function buyLayers(x: number, y: number, numLayersToAdd: number, color: string, stage: number) {
     try {
-      const accounts = await getConnectedPolygonAccounts();
-      if (accounts.length === 0) {
-        showWalletModal('Please connect your wallet to continue.');
-        return;
+      const provider = await getProvider();
+      if (!provider) {
+        throw new Error('No provider available');
       }
 
-      update(state => {
-        if (state.contracts.length <= stage) {
-          throw new Error('Invalid stage number');
-        }
-        return {
-          ...state,
-          loading: true,
-          loadingText: 'Purchasing layer...'
-        };
-      });
+      const accounts = await getConnectedPolygonAccounts();
+      if (accounts.length === 0) {
+        throw new Error('No connected accounts');
+      }
+
+      const userAddress = accounts[0];
+      const signer = provider.getSigner(userAddress);
+      const contract = new Contract(contractConfig.polygon.Pixelflux[stage], contractABIs[stage], await signer);
 
       const state = get({ subscribe });
-      const contract = state.contracts[stage];
-      const tx = await contract.buyLayer(x, y, color);
-      await tx.wait();
+      const baseValue = state.stages[stage]?.cells[y]?.[x]?.baseValue || new BigNumber(0);
+      const totalValueToSend = calculateTotalValueToSend(new BigNumber(numLayersToAdd), baseValue);
 
-      showNotification('Layer purchased successfully!');
+      let gasEstimation;
+      try {
+        gasEstimation = await contract.buyMultipleLayers.estimateGas(x, y, numLayersToAdd, color, { value: totalValueToSend.toString() });
+      } catch (error) {
+        console.log('Could not estimate gas', error);
+        gasEstimation = estimateGas(numLayersToAdd);
+      }
+
+      const txOptions = { value: totalValueToSend.toString(), gasLimit: gasEstimation };
+
+      if (numLayersToAdd === 1) {
+        await contract.buyLayer(x, y, color, txOptions);
+      } else {
+        await contract.buyMultipleLayers(x, y, numLayersToAdd, color, txOptions);
+      }
+
+      showNotification('Layer purchase successful!');
     } catch (error) {
-      console.error('Error buying layer:', error);
-      showNotification('Error purchasing layer. Please try again.');
-    } finally {
-      update(state => ({
-        ...state,
-        loading: false,
-        loadingText: ''
-      }));
+      console.error('Error buying layers:', error);
+      showNotification('Error purchasing layers. Please try again.');
+      throw error;
     }
+  }
+
+  function getSelectedCellLayers(): Layer[] {
+    const state = get({ subscribe });
+    const selectedSquare = canvasStore.getSelectedSquare();
+    if (!selectedSquare) return [];
+    
+    const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+    const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+    const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+    return state.stages[stage]?.cells[y]?.[x]?.layers || [];
+  }
+
+  function getSelectedCellValue(): BigNumber {
+    const state = get({ subscribe });
+    const selectedSquare = canvasStore.getSelectedSquare();
+    if (!selectedSquare) return new BigNumber(0);
+    
+    const x = parseInt(selectedSquare.getAttribute('data-gridX') || '0', 10);
+    const y = parseInt(selectedSquare.getAttribute('data-gridY') || '0', 10);
+    const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
+
+    return state.stages[stage]?.cells[y]?.[x]?.baseValue || new BigNumber(0);
   }
 
   return {
     subscribe,
+    set,
+    update,
     fetchStages,
-    buyLayer,
-    getConnectedPolygonAccounts
+    buyLayers,
+    getSelectedCellLayers,
+    getSelectedCellValue,
+    getConnectedPolygonAccounts,
+    calculateTotalValueToSend
   };
 }
 
