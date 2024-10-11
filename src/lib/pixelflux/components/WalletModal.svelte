@@ -2,15 +2,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { walletModalStore, hideWalletModal } from '../stores/walletModalStore';
+  import { walletStore } from '../stores/walletStore';
   import { showNotification } from '../stores/notificationStore';
-  import { ethers } from 'ethers';
 
   let show: boolean;
   let message: string;
   let isConnecting: boolean = false;
-
-  const POLYGON_CHAIN_ID = '0x89';
-  const POLYGON_RPC_URL = 'https://polygon-rpc.com';
 
   $: walletModalStore.subscribe(value => {
     show = value.show;
@@ -18,27 +15,10 @@
   });
 
   async function connectWallet() {
-    if (typeof window.ethereum === 'undefined') {
-      showNotification('No Ethereum wallet detected. Please install MetaMask.');
-      return;
-    }
-
     isConnecting = true;
-
     try {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      await provider.send('eth_requestAccounts', []);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-
-      const network = await provider.getNetwork();
-      if (network.chainId !== parseInt(POLYGON_CHAIN_ID, 16)) {
-        await switchToPolygon();
-      }
-
-      displayConnectedAddress(address);
+      await walletStore.connect();
       hideWalletModal();
-      showNotification('Wallet connected successfully!');
     } catch (error) {
       console.error('Error connecting wallet:', error);
       showNotification('Failed to connect wallet. Please try again.');
@@ -47,63 +27,16 @@
     }
   }
 
-  async function switchToPolygon() {
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: POLYGON_CHAIN_ID }],
-      });
-    } catch (switchError: any) {
-      // This error code indicates that the chain has not been added to MetaMask.
-      if (switchError.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: POLYGON_CHAIN_ID,
-                chainName: 'Polygon Mainnet',
-                nativeCurrency: {
-                  name: 'MATIC',
-                  symbol: 'MATIC',
-                  decimals: 18
-                },
-                rpcUrls: [POLYGON_RPC_URL],
-                blockExplorerUrls: ['https://polygonscan.com/'],
-              },
-            ],
-          });
-        } catch (addError) {
-          throw new Error('Failed to add Polygon network');
-        }
-      } else {
-        throw switchError;
-      }
-    }
-  }
-
-  function displayConnectedAddress(address: string) {
-    const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-    showNotification(`Connected: ${shortAddress}`);
-    // You might want to update this in your global state or emit an event
-  }
-
   onMount(() => {
-    if (typeof window.ethereum !== 'undefined') {
-      window.ethereum.on('accountsChanged', (accounts: string[]) => {
-        if (accounts.length > 0) {
-          displayConnectedAddress(accounts[0]);
-        } else {
-          showNotification('Wallet disconnected');
-        }
-      });
+    const unsubscribe = walletStore.subscribe(state => {
+      if (state.isConnected && state.chainId !== '0x89') {
+        walletStore.switchToPolygon();
+      }
+    });
 
-      window.ethereum.on('chainChanged', (chainId: string) => {
-        if (chainId !== POLYGON_CHAIN_ID) {
-          showNotification('Please switch to the Polygon network');
-        }
-      });
-    }
+    return () => {
+      unsubscribe();
+    };
   });
 </script>
 
@@ -113,12 +46,13 @@
       <h2>Connect to a Wallet</h2>
       <p>{message}</p>
       <button on:click={connectWallet} disabled={isConnecting}>
-        {isConnecting ? 'Connecting...' : 'Connect MetaMask'}
+        {isConnecting ? 'Connecting...' : 'Connect Wallet'}
       </button>
       <button on:click={hideWalletModal}>Close</button>
     </div>
   </div>
 {/if}
+
 
 <style>
   .wallet-modal-overlay {

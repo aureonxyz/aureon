@@ -1,52 +1,62 @@
 <script lang="ts">
-    import { ethers } from 'ethers';
-    import { showWalletModal, hideWalletModal } from '../stores/walletModalStore';
-    import { showNotification } from '../stores/notificationStore';
-  
-    export let isWalletConnected = false;
-    export let accountAddress = '';
-  
-    async function connectWallet() {
-      showWalletModal('Please connect your wallet to continue.');
-      if (typeof window.ethereum !== 'undefined') {
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          if (accounts.length > 0) {
-            isWalletConnected = true;
-            accountAddress = accounts[0];
-            await switchToPolygonNetwork();
-            hideWalletModal();
-            showNotification(`Connected: ${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)}`);
-          }
-        } catch (err) {
-          console.error("Error connecting to Browser Wallet:", err);
-        }
-      } else {
-        console.log("Browser Wallet is not installed.");
+  import { onMount } from 'svelte';
+  import { walletStore } from '../stores/walletStore';
+  import { showNotification } from '../stores/notificationStore';
+  import { onboard } from '../blockchainProvider';
+
+  let isWalletConnected = false;
+  let accountAddress = '';
+
+  $: {
+    isWalletConnected = $walletStore.isConnected;
+    accountAddress = $walletStore.address || '';
+  }
+
+  async function connectWallet() {
+    try {
+      await walletStore.connect();
+      if (isWalletConnected) {
+        await switchToPolygonNetwork();
+        showNotification(`Connected: ${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)}`);
       }
+    } catch (err) {
+      console.error("Error connecting to wallet:", err);
+      showNotification("Failed to connect wallet. Please try again.");
     }
-  
-    async function switchToPolygonNetwork() {
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x89' }],
-        });
-      } catch (switchError) {
-        console.error("Error switching to Polygon:", switchError);
+  }
+
+  async function switchToPolygonNetwork() {
+    try {
+      await onboard.setChain({ chainId: '0x89' });
+    } catch (switchError) {
+      console.error("Error switching to Polygon:", switchError);
+      showNotification("Failed to switch to Polygon network. Please switch manually.");
+    }
+  }
+
+  onMount(() => {
+    const unsubscribe = walletStore.subscribe(state => {
+      if (state.isConnected && state.chainId !== '0x89') {
+        switchToPolygonNetwork();
       }
-    }
-  </script>
-  
-  <div id="wallet-connection">
-    <button id="connect-wallet" on:click={connectWallet}>
-      {#if isWalletConnected}
-        <span id="address-text">{accountAddress.slice(0, 6)}...{accountAddress.slice(-4)}</span>
-      {:else}
-        <span id="connect-text">Connect Wallet</span>
-      {/if}
-    </button>
-  </div>
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  });
+</script>
+
+<div id="wallet-connection">
+  <button id="connect-wallet" on:click={connectWallet}>
+    {#if isWalletConnected}
+      <span id="address-text">{accountAddress.slice(0, 6)}...{accountAddress.slice(-4)}</span>
+    {:else}
+      <span id="connect-text">Connect Wallet</span>
+    {/if}
+  </button>
+</div>
+
   
   <style>
     #wallet-connection {

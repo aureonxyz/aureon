@@ -1,14 +1,30 @@
 import { BrowserProvider, JsonRpcProvider, WebSocketProvider } from 'ethers';
+import Onboard from '@web3-onboard/core';
+import injectedModule from '@web3-onboard/injected-wallets';
 import Pixelflux1JSON from './build/contracts/Pixelflux1.json';
 import Pixelflux2JSON from './build/contracts/Pixelflux2.json';
 import Pixelflux3JSON from './build/contracts/Pixelflux3.json';
 
-const getBrowserProvider = (): BrowserProvider | null => {
-  if (!window.ethereum) {
-    console.error('MetaMask or a similar wallet provider is required.');
-    return null;
+// Initialize Web3-Onboard
+const injected = injectedModule();
+const onboard = Onboard({
+  wallets: [injected],
+  chains: [
+    {
+      id: '0x89', // Polygon Mainnet
+      token: 'MATIC',
+      label: 'Polygon',
+      rpcUrl: `https://polygon-mainnet.infura.io/v3/${import.meta.env.VITE_INFURA_API_KEY}`
+    }
+  ]
+});
+
+const getBrowserProvider = async (): Promise<BrowserProvider | null> => {
+  const wallets = await onboard.connectWallet();
+  if (wallets[0]) {
+    return new BrowserProvider(wallets[0].provider);
   }
-  return new BrowserProvider(window.ethereum);
+  return null;
 }
 
 const getInfuraProvider = (): JsonRpcProvider | null => {
@@ -45,7 +61,6 @@ const getProvider = async (): Promise<BrowserProvider | JsonRpcProvider | null> 
       await provider.getNetwork();
       return provider;
     } catch (error: any) {
-      // Log error only if it's not a 403 Forbidden error
       if (!error.message.includes('403')) {
         console.error('InfuraProvider not supported:', error);
       }
@@ -62,7 +77,7 @@ const getProvider = async (): Promise<BrowserProvider | JsonRpcProvider | null> 
     }
   }
   
-  provider = getBrowserProvider();
+  provider = await getBrowserProvider();
   if (provider) {
     try {
       await provider.getNetwork();
@@ -77,4 +92,4 @@ const getProvider = async (): Promise<BrowserProvider | JsonRpcProvider | null> 
 
 const contractABIs = [Pixelflux1JSON.abi, Pixelflux2JSON.abi, Pixelflux3JSON.abi];
 
-export { contractABIs, getProvider, getBrowserProvider, getAnkrProvider, getWebsocketProvider };
+export { contractABIs, getProvider, getBrowserProvider, getAnkrProvider, getWebsocketProvider, onboard };

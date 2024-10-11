@@ -5,13 +5,14 @@
   import { showNotification } from '$pixelflux/stores/notificationStore';
   import { showWalletModal } from '$pixelflux/stores/walletModalStore';
   import { sidebarStore } from '$pixelflux/stores/sidebarStore';
+  import { walletStore } from '$pixelflux/stores/walletStore';
   import ResponsiveSidebar from '$pixelflux/components/ResponsiveSidebar.svelte';
   import Canvas from '$pixelflux/components/Canvas.svelte';
   import Notification from '$pixelflux/components/Notification.svelte';
   import WalletModal from '$pixelflux/components/WalletModal.svelte';
- 
+
   let loadingError = '';
- 
+
   onMount(async () => {
     try {
       await blockchainStore.fetchStages();
@@ -25,42 +26,42 @@
       }
     }
   });
- 
+
   $: ({ loading, loadingProgress, loadingText, stages, totalValues } = $blockchainStore);
   $: if (stages && totalValues) {
     canvasStore.update(state => ({ ...state, stages, totalValues }));
   }
- 
+
   function retryLoading() {
     loadingError = '';
     blockchainStore.fetchStages();
   }
- </script>
- 
- <div id="wrapper" class:sidebar-open={$sidebarStore.isOpen}>
-   <ResponsiveSidebar />
-   <div id="main-content">
-     {#if loading}
-       <div id="loading">
-         <div id="progress-bar">
-           <div class="progress-fill" style="width: {loadingProgress}%"></div>
-         </div>
-         <div id="loading-text">{loadingText}</div>
-       </div>
-     {:else if loadingError}
-       <div id="error">
-         <p>{loadingError}</p>
-         <button on:click={retryLoading}>Retry</button>
-       </div>
-     {:else}
-       <Canvas />
-     {/if}
-   </div>
- </div>
- 
- <WalletModal />
- <Notification />
- 
+</script>
+
+<div id="wrapper" class:sidebar-open={$sidebarStore.isOpen}>
+  <ResponsiveSidebar />
+  <div id="main-content">
+    {#if loading}
+      <div id="loading">
+        <div id="progress-bar">
+          <div class="progress-fill" style="width: {loadingProgress}%"></div>
+        </div>
+        <div id="loading-text">{loadingText}</div>
+      </div>
+    {:else if loadingError}
+      <div id="error">
+        <p>{loadingError}</p>
+        <button on:click={retryLoading}>Retry</button>
+      </div>
+    {:else}
+      <Canvas />
+    {/if}
+  </div>
+</div>
+
+<WalletModal />
+<Notification />
+
  <style>
    #wrapper {
      display: flex;

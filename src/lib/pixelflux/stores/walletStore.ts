@@ -1,22 +1,18 @@
 // stores/walletStore.ts
-
 import { writable } from 'svelte/store';
-import type { ethers } from 'ethers';
+import { onboard } from '../blockchainProvider';
+import { showNotification } from './notificationStore';
 
 interface WalletState {
   isConnected: boolean;
   address: string | null;
-  chainId: number | null;
-  provider: ethers.providers.Web3Provider | null;
-  signer: ethers.Signer | null;
+  chainId: string | null;
 }
 
 const initialState: WalletState = {
   isConnected: false,
   address: null,
   chainId: null,
-  provider: null,
-  signer: null,
 };
 
 function createWalletStore() {
@@ -24,57 +20,31 @@ function createWalletStore() {
 
   return {
     subscribe,
+    set,
+    update,
+    reset: () => set(initialState),
     connect: async () => {
-      if (typeof window.ethereum !== 'undefined') {
-        try {
-          // Request account access
-          await window.ethereum.request({ method: 'eth_requestAccounts' });
-          
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const signer = provider.getSigner();
-          const address = await signer.getAddress();
-          const network = await provider.getNetwork();
-
-          update(state => ({
-            ...state,
-            isConnected: true,
-            address,
-            chainId: network.chainId,
-            provider,
-            signer,
-          }));
-
-          // Listen for account changes
-          window.ethereum.on('accountsChanged', (accounts: string[]) => {
-            if (accounts.length === 0) {
-              // User disconnected their wallet
-              set(initialState);
-            } else {
-              // User switched to a different account
-              update(state => ({ ...state, address: accounts[0] }));
-            }
-          });
-
-          // Listen for chain changes
-          window.ethereum.on('chainChanged', (chainId: string) => {
-            update(state => ({ ...state, chainId: parseInt(chainId, 16) }));
-          });
-
-        } catch (error) {
-          console.error('Failed to connect wallet:', error);
-        }
-      } else {
-        console.error('No Ethereum provider found');
+      const wallets = await onboard.connectWallet();
+      if (wallets[0]) {
+        const { accounts, chains } = wallets[0];
+        update(state => ({
+          ...state,
+          isConnected: true,
+          address: accounts[0].address,
+          chainId: chains[0].id
+        }));
+        showNotification(`Connected: ${accounts[0].address.slice(0, 6)}...${accounts[0].address.slice(-4)}`);
       }
     },
-    disconnect: () => {
-      // Note: There's no standard way to programmatically disconnect a wallet.
-      // This just resets the store to its initial state.
+    disconnect: async () => {
+      const [primaryWallet] = onboard.state.get().wallets;
+      if (primaryWallet) await onboard.disconnectWallet({ label: primaryWallet.label });
       set(initialState);
+      showNotification('Wallet disconnected');
     },
-    updateChainId: (chainId: number) => {
-      update(state => ({ ...state, chainId }));
-    },
+    switchToPolygon: async () => {
+      await onboard.setChain({ chainId: '0x89' });
+    }
   };
 }
 
