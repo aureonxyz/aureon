@@ -71,13 +71,11 @@
       const stage = parseInt(selectedSquare.getAttribute('data-stage') || '0', 10);
 
       await blockchainStore.buyLayers(x, y, layerSliderValue, selectedColor, stage);
-      showNotification(`Successfully purchased ${layerSliderValue} layers!`);
       
       layerSliderValue = 0;
       handleLayerSliderUpdate();
     } catch (error) {
       console.error('Purchase failed:', error);
-      showNotification('Purchase failed. Please try again.');
     }
   }
 </script>
@@ -115,7 +113,7 @@
     <p>Total Cost</p>
     <span id="current-cost">{currentCost.toFixed(4)} MATIC</span>
   </span>
-  <button on:click={buyLayer} disabled={!isWalletConnected || !selectedSquare || layerSliderValue === 0}>
+  <button on:click={buyLayer} disabled={!selectedSquare || layerSliderValue === 0}>
     Buy {layerSliderValue > 1 ? 'Layers' : 'Layer'}
   </button>
 </div>

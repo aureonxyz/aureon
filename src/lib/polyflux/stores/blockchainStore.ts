@@ -164,6 +164,7 @@ function createBlockchainStore(): BlockchainStore {
       (GAS_PER_NEW_LAYER * numLayersToAdd)
     ) * BUFFER_MULTIPLIER);
   }
+  
   async function buyLayers(x: number, y: number, numLayersToAdd: number, color: string, stage: number) {
     try {
       const walletState = get(walletStore);
