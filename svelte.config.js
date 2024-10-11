@@ -8,7 +8,7 @@ const config = {
   kit: {
     adapter: adapter(),
     alias: {
-      '$pixelflux': path.resolve('./src/lib/pixelflux')
+      '$polyflux': path.resolve('./src/lib/polyflux')
     }
   },
 };

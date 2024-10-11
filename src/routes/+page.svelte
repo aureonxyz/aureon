@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import { fly, fade } from 'svelte/transition';
   import GameCard from '../lib/components/GameCard.svelte';
-  import PixelfluxScreenshot from '../assets/pixelflux-screenshot.jpg'
+  import PolyfluxScreenshot from '../assets/polyflux-screenshot.jpg'
   let visible = false;
 
   onMount(() => {
@@ -12,10 +12,10 @@
 
   const games = [
     {
-      name: 'PixelFlux',
+      name: 'Polyflux',
       description: 'A simple canvas on Polygon that lets users buy the top layers of pixels, choose the color, and earn anytime someone buys a pixel layer on top of yours.',
-      image: PixelfluxScreenshot,
-      route: '/pixelflux'
+      image: PolyfluxScreenshot,
+      route: '/polyflux'
     }
     // Add more games here as needed
   ];

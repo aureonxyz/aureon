@@ -1,15 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { blockchainStore } from '$pixelflux/stores/blockchainStore';
-  import { canvasStore } from '$pixelflux/stores/canvasStore';
-  import { showNotification } from '$pixelflux/stores/notificationStore';
-  import { showWalletModal } from '$pixelflux/stores/walletModalStore';
-  import { sidebarStore } from '$pixelflux/stores/sidebarStore';
-  import { walletStore } from '$pixelflux/stores/walletStore';
-  import ResponsiveSidebar from '$pixelflux/components/ResponsiveSidebar.svelte';
-  import Canvas from '$pixelflux/components/Canvas.svelte';
-  import Notification from '$pixelflux/components/Notification.svelte';
-  import WalletModal from '$pixelflux/components/WalletModal.svelte';
+  import { blockchainStore } from '$lib/polyflux/stores/blockchainStore';
+  import { canvasStore } from '$lib/polyflux/stores/canvasStore';
+  import { showNotification } from '$lib/polyflux/stores/notificationStore';
+  import { sidebarStore } from '$lib/polyflux/stores/sidebarStore';
+  import ResponsiveSidebar from '$lib/polyflux/components/ResponsiveSidebar.svelte';
+  import Canvas from '$lib/polyflux/components/Canvas.svelte';
+  import Notification from '$lib/polyflux/components/Notification.svelte';
 
   let loadingError = '';
 
@@ -19,7 +16,6 @@
     } catch (error: any) {
       if (error.message === 'Failed to get a provider.') {
         loadingError = 'No wallet provider found.';
-        showWalletModal('Please connect your wallet to continue.');
       } else {
         loadingError = 'Failed to fetch data from the provider.';
         showNotification('Error fetching data from provider. Please retry again later.');
@@ -59,7 +55,6 @@
   </div>
 </div>
 
-<WalletModal />
 <Notification />
 
  <style>

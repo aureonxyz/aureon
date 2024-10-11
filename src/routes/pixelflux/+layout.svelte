@@ -2,20 +2,20 @@
 </script>
 
 <svelte:head>
-    <title>Pixelflux - Own Your Pixel Layer</title>
+    <title>Polyflux - Own Your Pixel Layer</title>
     <meta charset="UTF-8">
-    <meta name="description" content="Pixelflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
-    <meta name="keywords" content="Pixelflux, Buy Pixels, Pixel Ownership, Pixel Layers">
+    <meta name="description" content="Polyflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
+    <meta name="keywords" content="Polyflux, Buy Pixels, Pixel Ownership, Pixel Layers">
     <meta name="author" content="Satoru Tamashi">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <meta property="og:title" content="Pixelflux - Own Your Pixel Layer">
-    <meta property="og:description" content="Pixelflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
+    <meta property="og:title" content="Polyflux - Own Your Pixel Layer">
+    <meta property="og:description" content="Polyflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
     <meta property="og:image" content="/social_logo.jpg">
-    <meta property="og:url" content="https://polygon.pixelflux.io">
+    <meta property="og:url" content="https://polygon.polyflux.io">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Pixelflux - Own Your Pixel Layer">
-    <meta name="twitter:description" content="Pixelflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
+    <meta name="twitter:title" content="Polyflux - Own Your Pixel Layer">
+    <meta name="twitter:description" content="Polyflux allows you to buy and own pixels. Become a permanent owner and earn as layers are added to your pixel.">
     <meta name="twitter:image" content="/social_logo.jpg">
 </svelte:head>
 
