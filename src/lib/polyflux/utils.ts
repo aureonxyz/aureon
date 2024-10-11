@@ -27,13 +27,27 @@ const convertToFullHex = (hex: string): string => {
   return hex;
 }
 
-const roundToTwoSignificantFigures = (num: number): number => {
-  if (num === 0) {
+const roundToTwoSignificantFigures = (value: BigNumber | number): number => {
+  const num = BigNumber.isBigNumber(value) ? value : new BigNumber(value);
+  
+  if (num.isZero()) {
     return 0;
   }
-  const magnitude = Math.floor(Math.log10(Math.abs(num)));
-  const scale = Math.pow(10, magnitude - 1);
-  return parseFloat((Math.round(num / scale) * scale).toPrecision(2));
-}
+  
+  const absNum = num.abs();
+  let scale = new BigNumber(1);
+  
+  if (absNum.gte(100)) {
+    while (absNum.div(scale).gte(100)) {
+      scale = scale.times(10);
+    }
+  } else if (absNum.lt(1)) {
+    while (absNum.div(scale).lt(10)) {
+      scale = scale.div(10);
+    }
+  }
+  
+  return num.div(scale).decimalPlaces(1).times(scale).toNumber();
+};
 
 export { fromGweiToMatic, fromWeiToMatic, convertToFullHex, roundToTwoSignificantFigures }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { canvasStore } from '../stores/canvasStore';
   import { blockchainStore } from '../stores/blockchainStore';
-  import { fromGweiToMatic } from '../utils';
+  import { fromGweiToMatic, roundToTwoSignificantFigures } from '../utils';
   import { showNotification } from '../stores/notificationStore';
   import { walletStore } from '../stores/walletStore';
   import BigNumber from 'bignumber.js';
@@ -126,7 +126,7 @@
   </div>
   <span id="current-cost-container">
     <p>Total Cost</p>
-    <span id="current-cost">{currentCost.toFixed(4)} MATIC</span>
+    <span id="current-cost">{roundToTwoSignificantFigures(currentCost)} MATIC</span>
   </span>
   <button on:click={buyLayer} disabled={!selectedSquare || layerSliderValue === 0}>
     Buy {layerSliderValue > 1 ? 'Layers' : 'Layer'}

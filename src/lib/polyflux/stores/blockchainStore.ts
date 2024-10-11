@@ -9,7 +9,7 @@ import contractConfig from '../config/contracts.json';
 import { getProvider, contractABIs, getWebsocketProvider, onboard } from '../blockchainProvider';
 import { canvasStore } from './canvasStore';
 import { showNotification } from './notificationStore';
-import { fromGweiToMatic, fromMaticToWei } from '../utils';
+import { fromGweiToMatic, fromMaticToWei, fromWeiToMatic } from '../utils';
 import { walletStore } from './walletStore';
 
 const initialState: BlockchainState = {
@@ -116,27 +116,35 @@ function createBlockchainStore(): BlockchainStore {
       throw error;
     }
   }
+  function calculateTotalValueToSend(numLayersToAdd: number): BigNumber {
+    const state = get({ subscribe });
+    const selectedSquare = canvasStore.getSelectedSquare();
+    if (!selectedSquare) return new BigNumber(0);
+    
+    const squareValue = new BigNumber(selectedSquare.getAttribute('data-squareValue') || '0');
+    const currentLayersCount = getSelectedCellLayers().length;
   
-function calculateTotalValueToSend(numLayersToAdd: number): BigNumber {
-  const state = get({ subscribe });
-  const selectedSquare = canvasStore.getSelectedSquare();
-  if (!selectedSquare) return new BigNumber(0);
+    const sumOfSeries = new BigNumber(numLayersToAdd)
+      .multipliedBy(2 * currentLayersCount + numLayersToAdd - 1)
+      .dividedBy(2);
   
-  const squareValue = new BigNumber(selectedSquare.getAttribute('data-squareValue') || '0');
-  const valueInMatic = new BigNumber(fromGweiToMatic(squareValue));
-  const totalCost = valueInMatic.multipliedBy(numLayersToAdd);
+    const refundAmount = squareValue
+      .multipliedBy(numLayersToAdd)
+      .multipliedBy(numLayersToAdd - 1)
+      .dividedBy(2);
   
-  // Convert the total cost from MATIC to WEI
-  const totalValueInWei = new BigNumber(fromMaticToWei(totalCost.toString()));
-
-  console.log('Square value (Gwei):', squareValue.toString());
-  console.log('Value in MATIC:', valueInMatic.toString());
-  console.log('Total cost (MATIC):', totalCost.toString());
-  console.log('Total value to send (WEI):', totalValueInWei.toString());
+    const totalCost = squareValue.multipliedBy(sumOfSeries).minus(refundAmount);
   
-  return totalValueInWei;
-}
-
+    console.log('Square value (Gwei):', squareValue.toString());
+    console.log('Current layers:', currentLayersCount);
+    console.log('Layers to add:', numLayersToAdd);
+    console.log('Sum of series:', sumOfSeries.toString());
+    console.log('Refund amount:', refundAmount.toString());
+    console.log('Total cost (Gwei):', totalCost.toString());
+    console.log('Total cost (MATIC):', fromGweiToMatic(totalCost));
+    
+    return totalCost;
+  }
 
   function estimateGas(numLayersToAdd: number): number {
     const state = get({ subscribe });
@@ -173,32 +181,26 @@ function calculateTotalValueToSend(numLayersToAdd: number): BigNumber {
 
       const contract = new Contract(contractConfig.polygon.Polyflux[stage], contractABIs[stage], signer);
 
-      const totalValueToSend = calculateTotalValueToSend(numLayersToAdd);
-      console.log('Total value to send (WEI):', totalValueToSend.toString());
-  
-      let gasEstimation;
-      try {
-        gasEstimation = await contract.buyMultipleLayers.estimateGas(x, y, numLayersToAdd, color, { value: totalValueToSend.toString() });
+        const totalValueToSendGwei = calculateTotalValueToSend(numLayersToAdd);
+        const totalValueToSendWei = totalValueToSendGwei.multipliedBy(1e9); // Convert Gwei to Wei
+        console.log('Total value to send (Gwei):', totalValueToSendGwei.toString());
+        console.log('Total value to send (Wei):', totalValueToSendWei.toString());
+
+        const txOptions = { 
+          value: totalValueToSendWei.toString(),
+          gasLimit: await estimateGas(numLayersToAdd)
+        };
+
+        let tx;
+        if (numLayersToAdd === 1) {
+          tx = await contract.buyLayer(x, y, color, txOptions);
+        } else {
+          tx = await contract.buyMultipleLayers(x, y, numLayersToAdd, color, txOptions);
+        }
+
+        await tx.wait();
+        showNotification('Layer purchase successful!');
       } catch (error: any) {
-        console.log('Could not estimate gas', error);
-        gasEstimation = estimateGas(numLayersToAdd);
-      }
-  
-      const txOptions = { 
-        value: totalValueToSend.toString(),
-        gasLimit: gasEstimation
-      };
-
-      let tx;
-      if (numLayersToAdd === 1) {
-        tx = await contract.buyLayer(x, y, color, txOptions);
-      } else {
-        tx = await contract.buyMultipleLayers(x, y, numLayersToAdd, color, txOptions);
-      }
-
-      await tx.wait();
-      showNotification('Layer purchase successful!');
-    } catch (error: any) {
       console.error('Error buying layers:', error);
       if (error.code === 4001) {
         showNotification('Transaction cancelled by user.');
