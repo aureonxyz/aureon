@@ -1,4 +1,5 @@
 import BigNumber from 'bignumber.js';
+import { ethers } from 'ethers';
 
 const fromGweiToMatic = (value: BigNumber | string | number): string => {
   if (!value) return '0';
@@ -12,12 +13,10 @@ const fromWeiToMatic = (value: BigNumber | string | number): string => {
   const maticValue = bnValue.dividedBy(new BigNumber(10).pow(18));
   return maticValue.toString();
 };
-const fromMaticToWei = (value: BigNumber | number | string): string => {
-  const maticValue = new BigNumber(value);
-  const weiValue = maticValue.multipliedBy(new BigNumber(10).pow(18));
-  return weiValue.toFixed(0);
-};
 
+export function fromMaticToWei(value: string | number): string {
+  return ethers.parseUnits(value.toString(), 18).toString();
+}
 const convertToFullHex = (hex: string): string => {
   if (hex.length === 4) {
     const r = hex[1];
@@ -37,4 +36,4 @@ const roundToTwoSignificantFigures = (num: number): number => {
   return parseFloat((Math.round(num / scale) * scale).toPrecision(2));
 }
 
-export { fromGweiToMatic, fromWeiToMatic, fromMaticToWei, convertToFullHex, roundToTwoSignificantFigures }
+export { fromGweiToMatic, fromWeiToMatic, convertToFullHex, roundToTwoSignificantFigures }

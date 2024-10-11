@@ -34,7 +34,7 @@ export interface BlockchainStore extends Writable<BlockchainState> {
   buyLayers: (x: number, y: number, numLayersToAdd: number, color: string, stage: number) => Promise<void>;
   getSelectedCellLayers: () => Layer[];
   getSelectedCellValue: () => BigNumber;
-  calculateTotalValueToSend: (numLayersToAdd: BigNumber, baseValue: BigNumber) => BigNumber;
+  calculateTotalValueToSend: (numLayersToAdd: number) => BigNumber;
 }
 
 export interface CanvasState {

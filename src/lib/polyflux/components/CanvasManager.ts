@@ -86,8 +86,8 @@ export class CanvasManager {
         }
         
         rect.setAttribute("data-squareLayers", JSON.stringify(cell.layers));
-  
-        rect.addEventListener('mousedown', (e) => this.handleSquareClick(e));
+
+        rect.addEventListener('mousedown', (e) => this.handleSquareClick(e, x, y, stage));
         rect.addEventListener('mouseover', () => this.handleSquareHover(rect));
         rect.addEventListener('mouseout', () => this.handleSquareHoverOut(rect));
         this.svg.appendChild(rect);
@@ -181,23 +181,46 @@ export class CanvasManager {
 
 
 
-  handleSquareClick = (e: MouseEvent): void => {
+  handleSquareClick = (e: MouseEvent, x: number, y: number, stage: number): void => {
+
     const clickedSquare = e.target as SVGRectElement;
     if (!clickedSquare) return;
+  
+    // Remove the border from the previously selected square
+    if (clickedSquare) {
+      clickedSquare.setAttribute("stroke-width", "1");
+      clickedSquare.setAttribute("stroke", CANVAS_CONFIG.GRID_COLOR);
+    }
+  
+    clickedSquare.setAttribute("stroke-width", "3");
+    clickedSquare.setAttribute("stroke", "#FFFF00");  // Yellow border for selected cell
+  
+    const cell = get(canvasStore).stages[stage].cells[y][x];
+    const lastLayer = cell.layers[cell.layers.length - 1];
+    const color = lastLayer ? lastLayer.color : "#000000";
+  
     canvasStore.setSelectedSquare(clickedSquare);
+    colorStore.set(color);  // Set the color to the last layer's color
   }
-
+  
   handleSquareHover = (square: SVGRectElement): void => {
-    square.setAttribute("stroke-width", "2");
-    square.setAttribute("stroke", "#FFFF00");  // Hover color
-  }
+    const selectedSquare = get(canvasStore).selectedSquare;
 
+    if (square !== selectedSquare) {
+      square.setAttribute("stroke-width", "2");
+      square.setAttribute("stroke", "#FFFF00");  // Hover color
+    }
+  }
+  
   handleSquareHoverOut = (square: SVGRectElement): void => {
-    if (square !== get(canvasStore).selectedSquare) {
+    const selectedSquare = get(canvasStore).selectedSquare;
+
+    if (square !== selectedSquare) {
       square.setAttribute("stroke-width", "1");
       square.setAttribute("stroke", CANVAS_CONFIG.GRID_COLOR);
     }
   }
+
   updateSelectedSquareColor = (): void => {
     const selectedSquare = get(canvasStore).selectedSquare;
     const selectedColor = get(colorStore);

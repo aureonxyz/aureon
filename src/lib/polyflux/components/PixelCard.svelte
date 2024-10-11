@@ -34,7 +34,7 @@
 
       coordinates = `x: ${x}, y: ${y}`;
       originalFill = selectedSquare.getAttribute('data-originalFill') || '#000';
-      currentFill = selectedColor;  // Use the selected color from the store
+      currentFill = selectedColor ? selectedColor : '#000';  // Use the selected color from the store
 
     } else {
       squareLayers = [];

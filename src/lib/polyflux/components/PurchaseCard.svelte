@@ -7,8 +7,9 @@
   import BigNumber from 'bignumber.js';
   import { default as defaultColors } from '../config/colors.json';
   import { colorStore } from '../stores/colorStore';
+    import { onMount } from 'svelte';
   
-  let layerSliderValue = 0;
+  let layerSliderValue = 1;
   let currentCost: BigNumber;
   let selectedSquare: SVGRectElement | null = null;
   let selectedColor = '#000000';
@@ -35,7 +36,14 @@
       }
     }
   }
-  
+
+  function setColor(color: string) {
+    selectedColor = color;
+    colorStore.set(color);
+    if (selectedSquare) {
+      selectedSquare.setAttribute('fill', color);
+    }
+  }
 
   function decreaseLayer() {
     if (layerSliderValue > 0) {
@@ -51,10 +59,6 @@
     }
   }
 
-  function setColor(color: string) {
-    selectedColor = color;
-    colorStore.set(color)
-  }
 
   async function buyLayer() {
     if (!isWalletConnected) {
@@ -78,6 +82,17 @@
       console.error('Purchase failed:', error);
     }
   }
+
+  onMount(() => {
+    // Reset layer slider to 1 when a new square is selected
+    const unsubscribe = canvasStore.subscribe(state => {
+      if (state.selectedSquare) {
+        layerSliderValue = 1;
+      }
+    });
+
+    return () => unsubscribe();
+  });
 </script>
 
 <div class="purchase-card">
